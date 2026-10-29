@@ -48,7 +48,8 @@ public sealed class AppSettings
     /// <summary>字幕条是否显示 ASR 中间结果。</summary>
     public bool ShowAsrPartial { get; set; } = true;
 
-    public bool LaunchAtLogin { get; set; } = true;
+    /// <summary>默认不开：静默写自启项是用户最反感的一类行为。托盘菜单里显式勾选才写。</summary>
+    public bool LaunchAtLogin { get; set; } = false;
 
     public string TtsVoiceId { get; set; } = "volcengine.xiaohe";
 

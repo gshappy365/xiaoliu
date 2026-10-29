@@ -47,7 +47,8 @@ public partial class OverlayWindow : Window
         Height = _origin.Height;
     }
 
-    public void Show()
+    /// <summary>确保窗口存在且铺满当前桌面。名字不叫 Show 是避免遮蔽 Window.Show。</summary>
+    public void ShowOverlay()
     {
         Place();
         if (!IsVisible)
@@ -58,7 +59,7 @@ public partial class OverlayWindow : Window
 
     public void Draw(GuidanceMark mark)
     {
-        Show();
+        ShowOverlay();
 
         var brush = mark.IsActIntent ? Act : Accent;
         switch (mark.Kind)

@@ -18,6 +18,9 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <!-- WFAC010 建议用 ApplicationHighDpiMode 取代 manifest 里的 DPI 设置；
+         那是 WinForms 的建议，WPF 走的是 manifest 的 permonitorv2，保留 manifest。 -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

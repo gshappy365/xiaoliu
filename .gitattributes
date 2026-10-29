@@ -1,0 +1,7 @@
+# 统一换行：Windows 仓库，源码里 LF 也不影响构建
+* text=auto eol=crlf
+*.cs text eol=crlf
+*.xaml text eol=crlf
+*.md text eol=crlf
+*.sh text eol=lf
+*.json text eol=crlf

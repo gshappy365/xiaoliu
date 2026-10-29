@@ -119,6 +119,15 @@ public sealed class TrayHost : IDisposable
         menu.Items.Add("圈选一块区域（Ctrl+Alt+S）", null, (_, _) => BeginSelection());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("打开设置文件", null, (_, _) => OpenPath(AppSettings.DefaultPath));
+        var autoStart = new ToolStripMenuItem("开机自启") { Checked = _settings.LaunchAtLogin, CheckOnClick = true };
+        autoStart.CheckedChanged += (_, _) =>
+        {
+            _settings.LaunchAtLogin = autoStart.Checked;
+            _settings.Save();
+            ApplyLaunchAtLogin(autoStart.Checked);
+            _subtitle.ShowTransient(autoStart.Checked ? "下次登录会自动启动。" : "已取消开机自启。", "小柳");
+        };
+        menu.Items.Add(autoStart);
         menu.Items.Add("打开日志目录", null, (_, _) =>
             OpenPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "xiaoliu", "logs")));
         menu.Items.Add(new ToolStripSeparator());
