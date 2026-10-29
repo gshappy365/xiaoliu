@@ -24,6 +24,17 @@ dotnet publish src/Xiaoliu.App/Xiaoliu.App.csproj -c Release   # 单文件 exe
 
 开发时直接跑 `dotnet run --project src/Xiaoliu.App`。加 `--demo` 会把四种指点图形一次画出来，调样式用。
 
+### 自检：`--demo typing`
+
+```bash
+xiaoliu.exe --demo typing   # 退出码 0 = 通过
+```
+
+验证 `insert_text` 的完整链路：起一个记事本把前台占住（模拟「小柳在后台」），再从它手里把靶子窗口抢回前台，键入 30 个中英混合字符并核对。日志在 `%LOCALAPPDATA%\xiaoliu\logs\`。
+
+这条自检不是摆设：它抓到过一个会把字打进别的程序的 bug。`SendInput` 投递给的是**当前前台窗口**而不是句柄，抢前台失败还照打，字符就进了用户当时正在用的程序 —— 而 WPF 的 `IsActive` 这时还显示 `true`。现在 `insert_text` 抢不到前台就一个字符不打，直接回 `target_not_focusable`。
+
+
 ## 配置
 
 `%LOCALAPPDATA%\xiaoliu\settings.json`，首次运行不自动创建（用默认值跑），改过设置后才会写出来。
@@ -83,5 +94,7 @@ dotnet publish src/Xiaoliu.App/Xiaoliu.App.csproj -c Release   # 单文件 exe
 
 - 取图用 GDI `BitBlt`，受 DRM 保护的窗口和独占全屏会拿到黑图。要覆盖这些场景得换 WGC。
 - 同一时间只能和一个进程抢热键：小柳与点点同时运行会互相干扰，二选一。
+- `insert_text` 要求能把目标窗口切到前台。切不过去（比如目标被别的程序盖着、或用户在切过去的瞬间又点了别处）就**一个字符都不打**并回 `target_not_focusable` / `target_lost_focus`，请用户手动点一下目标窗口再说一次。宁可没填，也不能填错地方。
 - `report_text_insertion` 的 `written` 结论被策略拒绝（没有画面可核对），填字只能到 `uncertain`。
 - 语音中继的 partial 依赖服务器端滚动重解码，`doubao` 后端没有 partial。
+- 多屏只按虚拟桌面并集写，没在真实多屏机器上验过。

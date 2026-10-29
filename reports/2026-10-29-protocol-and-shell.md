@@ -16,8 +16,8 @@
 | 圈选图 + 指点 | `chat --tools --capture "…告诉我最左边的图标在哪"` | `point_at_screen` accepted，图形坐标 (96,540)，1 次工具调用 |
 | ASR 中继 | `asr asr-20261028-132612.wav` | 8.00s 音频 → 「呃，你可以用这个 overlay 在当前屏幕画一个三角…」 |
 | TTS 中继 | `tts "小柳在这里，线协议已经通了。"` | 首帧 4049ms，258568 字节 ≈ 5.39s 音频 |
-| 单文件发布 | `dotnet publish -c Release` | 67,650,757 字节，能起、日志正常 |
-| `insert_text` 全链路 | `xiaoliu.exe --demo typing` | 从外部进程手里抢回前台，30 字全部送达，退出码 0 |
+| 单文件发布 | `dotnet publish -c Release` | 67,653,825 字节，能起、日志正常、未写自启项 |
+| `insert_text` 全链路 | `xiaoliu.exe --demo typing` | 从外部进程手里抢回前台，30 字全部送达，退出码 0；**发布产物上复跑同样通过** |
 | 单元测试 | `dotnet test` | 35 项全绿 |
 
 界面部分单独截了图确认：字幕条（`artifacts/ui-subtitle.jpg`）、四种指点图形（`artifacts/ui-overlay.jpg`，用 `--demo` 触发）。
