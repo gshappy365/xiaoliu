@@ -66,6 +66,7 @@ public sealed class Companion : IDisposable
         _agent.ToolStarted += name => Ui(() => _subtitle.ShowStatus(DescribeTool(name)));
 
         _audio.AudioCaptured += OnAudioCaptured;
+        _audio.CaptureDeviceNumber = settings.CaptureDeviceNumber;
     }
 
     public VisualEvidence.Shot AddSelection(CaptureRect rect, CapturedImage image)

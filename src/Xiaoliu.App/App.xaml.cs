@@ -16,10 +16,22 @@ public partial class App : Application
         // 免得自检的合成输入被自己的钩子链看到（虽然合成输入本来就进不去）。
         var args = Environment.GetCommandLineArgs();
         var demoAt = Array.IndexOf(args, "--demo");
-        if (demoAt >= 0 && demoAt + 1 < args.Length &&
-            string.Equals(args[demoAt + 1], "typing", StringComparison.OrdinalIgnoreCase))
+        var demoMode = demoAt >= 0 && demoAt + 1 < args.Length ? args[demoAt + 1] : "";
+
+        if (string.Equals(demoMode, "typing", StringComparison.OrdinalIgnoreCase))
         {
             TypingSelfCheck.Run();
+            return;
+        }
+
+        if (string.Equals(demoMode, "mic", StringComparison.OrdinalIgnoreCase))
+        {
+            var seconds = demoAt + 2 < args.Length && int.TryParse(args[demoAt + 2], out var parsed) ? parsed : 3;
+            var deviceAt = Array.IndexOf(args, "--device");
+            int? device = deviceAt >= 0 && deviceAt + 1 < args.Length && int.TryParse(args[deviceAt + 1], out var number)
+                ? number
+                : null;
+            MicSelfCheck.Run(seconds, device);
             return;
         }
 

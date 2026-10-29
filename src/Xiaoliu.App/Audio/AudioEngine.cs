@@ -17,6 +17,27 @@ public sealed class AudioEngine : IDisposable
     private WaveOutEvent? _output;
     private BufferedWaveProvider? _buffer;
 
+    /// <summary>
+    /// 录音设备序号，-1 表示跟随系统默认。机器上挂虚拟声卡（VB-Audio、远程桌面虚拟设备）时，
+    /// 默认设备很容易落到一个永远静音的端点上 —— 表现为「按住说话没反应」，看起来像程序坏了。
+    /// </summary>
+    public int CaptureDeviceNumber { get; set; } = -1;
+
+    /// <summary>上一次实际打开的录音设备名，日志与自检用。</summary>
+    public string? LastCaptureDeviceName { get; private set; }
+
+    /// <summary>枚举系统里的录音设备，序号与 WaveInEvent.DeviceNumber 一致。</summary>
+    public static IReadOnlyList<string> ListCaptureDevices()
+    {
+        var names = new List<string>();
+        for (var i = 0; i < WaveInEvent.DeviceCount; i++)
+        {
+            names.Add($"{i}: {WaveInEvent.GetCapabilities(i).ProductName}");
+        }
+
+        return names;
+    }
+
     /// <summary>采集到的 PCM（16k/16bit/mono）。回调在音频线程上，别在里面做重活。</summary>
     public event Action<byte[]>? AudioCaptured;
 
@@ -35,10 +56,22 @@ public sealed class AudioEngine : IDisposable
         {
             _capture = new WaveInEvent
             {
+                DeviceNumber = CaptureDeviceNumber,
                 WaveFormat = new WaveFormat(CaptureSampleRate, 16, 1),
                 BufferMilliseconds = 100,
                 NumberOfBuffers = 3,
             };
+
+            try
+            {
+                LastCaptureDeviceName = WaveInEvent.GetCapabilities(CaptureDeviceNumber).ProductName;
+            }
+            catch (Exception)
+            {
+                LastCaptureDeviceName = null;
+            }
+
+            Log.Info("audio", $"开始采集 设备={CaptureDeviceNumber}（{LastCaptureDeviceName ?? "未知"}）16kHz/16bit/mono");
             _capture.DataAvailable += (_, args) =>
             {
                 var chunk = new byte[args.BytesRecorded];

@@ -53,6 +53,13 @@ public sealed class AppSettings
 
     public string TtsVoiceId { get; set; } = "volcengine.xiaohe";
 
+    /// <summary>
+    /// 录音设备序号，-1 跟随系统默认。机器上挂虚拟声卡（VB-Audio、远程桌面虚拟设备）时，
+    /// 默认设备可能是一个永远静音的端点，表现为「按住说话没反应」。
+    /// 用 <c>xiaoliu.exe --demo mic</c> 看设备清单和电平。
+    /// </summary>
+    public int CaptureDeviceNumber { get; set; } = -1;
+
     /// <summary>本轮对话最多几次模型请求（含工具回环），点点是 6。</summary>
     public int MaxModelRequestsPerTurn { get; set; } = 6;
 
