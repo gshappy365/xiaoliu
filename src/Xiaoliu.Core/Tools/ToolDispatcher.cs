@@ -389,6 +389,12 @@ public sealed class ToolDispatcher
     private JsonObject ExecuteSearchHistory(ToolUseCall call, JsonElement args)
     {
         var query = args.TryGetProperty("query", out var value) ? value.GetString() ?? "" : "";
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Rejected(call, "invalid_arguments", "query 是空的，未检索历史。", "correct_arguments",
+                "把用户问到的关键词填进 query；用户没给关键词就不要检索。");
+        }
+
         var hits = _history.Search(query, 5);
         if (hits.Count == 0)
         {

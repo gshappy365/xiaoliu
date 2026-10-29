@@ -111,19 +111,35 @@ public sealed class HistoryStore : IDisposable
         return entryId;
     }
 
+    /// <summary>
+    /// 按关键词翻历史。空查询返回空结果 —— 不能返回「最近 N 条」：
+    /// 那等于模型不提任何关键词就能把用户的对话记录翻出来。
+    /// 查询里的 % 和 _ 按字面处理，否则一句 "%" 就能命中全部。
+    /// </summary>
     public IReadOnlyList<HistoryHit> Search(string query, int limit = 5)
     {
         var hits = new List<HistoryHit>();
+        var trimmed = query?.Trim() ?? "";
+        if (trimmed.Length == 0)
+        {
+            return hits;
+        }
+
+        var escaped = trimmed
+            .Replace("\\", "\\\\")
+            .Replace("%", "\\%")
+            .Replace("_", "\\_");
+
         using var command = _connection.CreateCommand();
         command.CommandText = """
             SELECT e.id, e.question, e.answer,
                    (SELECT COUNT(*) FROM screenshots s WHERE s.entry_id = e.id) AS shots
             FROM entries e
-            WHERE e.question LIKE $like OR e.answer LIKE $like
+            WHERE e.question LIKE $like ESCAPE '\' OR e.answer LIKE $like ESCAPE '\'
             ORDER BY e.id DESC
             LIMIT $limit;
             """;
-        command.Parameters.AddWithValue("$like", $"%{query}%");
+        command.Parameters.AddWithValue("$like", $"%{escaped}%");
         command.Parameters.AddWithValue("$limit", limit);
         using var reader = command.ExecuteReader();
         while (reader.Read())

@@ -18,7 +18,7 @@
 | TTS 中继 | `tts "小柳在这里，线协议已经通了。"` | 首帧 4049ms，258568 字节 ≈ 5.39s 音频 |
 | 单文件发布 | `dotnet publish -c Release` | 67,653,825 字节，能起、日志正常、未写自启项 |
 | `insert_text` 全链路 | `xiaoliu.exe --demo typing` | 从外部进程手里抢回前台，30 字全部送达，退出码 0；**发布产物上复跑同样通过** |
-| 单元测试 | `dotnet test` | 35 项全绿 |
+| 单元测试 | `dotnet test` | 40 项全绿 |
 
 界面部分单独截了图确认：字幕条（`artifacts/ui-subtitle.jpg`）、四种指点图形（`artifacts/ui-overlay.jpg`，用 `--demo` 触发）。
 
@@ -86,6 +86,15 @@ NativeWindows.TypeText(text);
 
 为了能测「抢不到前台就不许打字」这条，`ToolDispatcher` 的窗口操作抽成了 `IWindowWriter`（`Focus` / `IsForeground` / `Type`），生产实现直接落 Win32，测试用桩断言 `Type` 从未被调用 —— `InsertTextFocusTests` 四条。
 
+### 4. `search_history` 的空查询等于「把最近 5 段对话交出去」
+
+SQL 原来是 `WHERE question LIKE '%' || $q || '%'`。两个口子：
+
+- `query` 为空 → `LIKE '%%'` → 命中全部，再按 `id DESC LIMIT 5` 取最近 5 条。模型不提任何关键词就能翻用户的对话记录。
+- `query` 里带 `%` 或 `_` → 当通配符使，一句 `%` 同样拿到全部。
+
+修法：空查询直接返回空（并在工具层回 `invalid_arguments`，让模型知道是参数问题而不是「没找到」）；`%` / `_` / `\` 转义后配 `ESCAPE '\'` 按字面匹配。`HistorySearchTests` 五条锁住。
+
 ## 与点点的对照（实现时逐条核对过）
 
 | 环节 | 点点 | xiaoliu |
@@ -103,13 +112,14 @@ NativeWindows.TypeText(text);
 
 `src/Xiaoliu.Core` 3379 行 / 17 文件（协议 5、工具 2、取图 2、指点 1、存储 1、语音 1、Agent 2、Interop 2、配置 1）
 `src/Xiaoliu.App` 1861 行 / 12 文件（外壳 1、编排 1、窗口 4、音频 1、热键 1、自检 1、其余 3）
-`tests/Xiaoliu.Core.Tests` 620 行 / 5 文件（35 项）
+`tests/Xiaoliu.Core.Tests` 约 780 行 / 6 文件（40 项）
 
 ## 还没做的
 
 1. **语音整链没有真人验证**：ASR 和 TTS 分别验过，但「按住热键 → 听到回答」这一步需要人按键（低级键盘钩子不收合成输入）。
 2. **多屏未测**：取图与 overlay 都按虚拟桌面并集写，只有一块屏的机器上验过。
 3. **`insert_text` 只在自检靶子上验过**：抢前台 + 键入全链路通了，但没往真实第三方应用（记事本以外的）里填过；富文本/自绘控件可能另有脾气。
+4. **`read_user_file` 的「用户明确请求」还只是提示词，没有客户端强制**：现在只校验「绝对路径 + 是文件 + ≤512KB」，不校验这个路径有没有出现在用户本轮原话里。schema 里写的是「只读用户本轮明确请求的文件」，模型照做，但绕过去没有任何拦截。要真按「策略全部客户端执行」的口径落实，得让调度器拿到本轮用户原话，按文件名（或完整路径）比对，没出现就回 `path_not_user_requested`。**这条没做，因为会改变产品行为，等确认。**
 
 ## 挂起的 P0：按用户决定不动
 
