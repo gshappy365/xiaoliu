@@ -26,6 +26,7 @@ public sealed class ToolDispatcher
     private readonly AppSettings _settings;
     private readonly VisualEvidence _evidence;
     private readonly HistoryStore _history;
+    private readonly IWindowWriter _writer;
 
     private int _factsThisTurn;
     private int _insertionSequence;
@@ -34,11 +35,12 @@ public sealed class ToolDispatcher
     /// <summary>一旦置位，本轮所有后续工具调用都直接返回这条失败，不再执行。</summary>
     private string? _terminalFailure;
 
-    public ToolDispatcher(AppSettings settings, VisualEvidence evidence, HistoryStore history)
+    public ToolDispatcher(AppSettings settings, VisualEvidence evidence, HistoryStore history, IWindowWriter? writer = null)
     {
         _settings = settings;
         _evidence = evidence;
         _history = history;
+        _writer = writer ?? NativeWindowWriter.Instance;
     }
 
     /// <summary>指点图形要画出来了。</summary>
@@ -240,9 +242,27 @@ public sealed class ToolDispatcher
                 "从清单里选一个目标，或让用户先把窗口打开。");
         }
 
-        NativeWindows.Focus(match.Handle);
+        // 抢不到前台就一个字符都不能打。SendInput 是发给「当前前台窗口」的，
+        // 不是发给 handle 的 —— 抢前台失败还硬打，字就进了用户当时正在用的那个程序。
+        if (!_writer.Focus(match.Handle))
+        {
+            return Rejected(call, "target_not_focusable",
+                $"{match.ProcessName} 没能切到前台，为避免把字打进你正在用的其他窗口，一个字符都没有键入。",
+                "stop",
+                "不要重试。请用户手动点一下目标窗口再让他说一次，或换个目标。");
+        }
+
         Thread.Sleep(180);
-        var typed = NativeWindows.TypeText(text);
+
+        if (!_writer.IsForeground(match.Handle))
+        {
+            return Rejected(call, "target_lost_focus",
+                $"{match.ProcessName} 在切换过程中又被别的窗口抢走了前台，未键入任何字符。",
+                "stop",
+                "不要重试。请用户关掉抢焦点的窗口后再试。");
+        }
+
+        var typed = _writer.Type(text);
         var insertionId = $"insertion-{++_insertionSequence}";
 
         return Accepted(call, new JsonObject

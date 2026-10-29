@@ -12,6 +12,17 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // 开发自检走单独分支：不进互斥锁、不建托盘、不装热键钩子，
+        // 免得自检的合成输入被自己的钩子链看到（虽然合成输入本来就进不去）。
+        var args = Environment.GetCommandLineArgs();
+        var demoAt = Array.IndexOf(args, "--demo");
+        if (demoAt >= 0 && demoAt + 1 < args.Length &&
+            string.Equals(args[demoAt + 1], "typing", StringComparison.OrdinalIgnoreCase))
+        {
+            TypingSelfCheck.Run();
+            return;
+        }
+
         // 命名互斥锁防多开：两个实例抢同一套热键，第二个必然失效且没人看得出原因。
         _singleInstance = new Mutex(true, @"Global\xiaoliu.exe.single-instance", out var isFirst);
         if (!isFirst)

@@ -16,11 +16,13 @@
 | 圈选图 + 指点 | `chat --tools --capture "…告诉我最左边的图标在哪"` | `point_at_screen` accepted，图形坐标 (96,540)，1 次工具调用 |
 | ASR 中继 | `asr asr-20261028-132612.wav` | 8.00s 音频 → 「呃，你可以用这个 overlay 在当前屏幕画一个三角…」 |
 | TTS 中继 | `tts "小柳在这里，线协议已经通了。"` | 首帧 4049ms，258568 字节 ≈ 5.39s 音频 |
-| 单元测试 | `dotnet test` | 31 项全绿 |
+| 单文件发布 | `dotnet publish -c Release` | 67,650,757 字节，能起、日志正常 |
+| `insert_text` 全链路 | `xiaoliu.exe --demo typing` | 从外部进程手里抢回前台，30 字全部送达，退出码 0 |
+| 单元测试 | `dotnet test` | 35 项全绿 |
 
 界面部分单独截了图确认：字幕条（`artifacts/ui-subtitle.jpg`）、四种指点图形（`artifacts/ui-overlay.jpg`，用 `--demo` 触发）。
 
-## 两个当场撞上的坑
+## 当场撞上的坑
 
 ### 1. `messages` 里塞了数组 → 服务器 500
 
@@ -43,6 +45,47 @@
 
 现在：同一工具被策略拒绝第二次就置位「本轮停止工具恢复」；一轮里所有回执都不可重试时，直接收尾并用一句人话兜底（`ToolDispatcher.FallbackMessage`）。同样的提问降到 2 次请求、15 秒。
 
+### 3. `insert_text` 抢不到前台时，字会打进别的程序
+
+这是收尾时才挖出来的，也是这批里唯一一个会**造成实际破坏**的问题。
+
+`SendInput` 投递给「当前前台窗口」，不是投递给句柄。原来 `insert_text` 的写法是：
+
+```csharp
+NativeWindows.Focus(match.Handle);
+Thread.Sleep(180);
+NativeWindows.TypeText(text);
+```
+
+`Focus` 里只有一句 `SetForegroundWindow`。当前台被别的进程占着时，这个调用会被前台锁挡掉，**返回 false 但不抛异常**，而调用方把返回值丢了。结果就是：窗口没切过去，字照样发出去，全打进了用户当时正在用的那个程序。
+
+第一次写的自检没测出这个问题 —— 靶子窗口是自己进程的，没有外部进程来抢前台，等于没测。改成先起一个 notepad 把前台占住再抢回来，问题立刻现形：
+
+```
+阶段2 外部进程在前台=True 靶子窗口激活=False
+阶段3 SetForegroundWindow 返回=False
+阶段3 抢回前台=True 系统真实前台=Notepad.exe WPF_IsActive=True
+阶段4 期望 30 字 / 送出 30 键 / 收到 0 字 / ok=False
+```
+
+注意那行 `WPF_IsActive=True`：**WPF 的 `IsActive` 会说谎**，它记的是自己的账，不是系统眼里的前台。判据只能用 `GetForegroundWindow() == handle`。
+
+两处修：
+
+1. `NativeWindows.Focus` 用 `AttachThreadInput` 把本线程的输入队列临时挂到「当前前台线程」和「目标线程」上再交接 —— 前台锁只拦非前台线程，挂上之后这次交接就是合法的。返回值改成 `GetForegroundWindow() == handle`，即「真的切过去了没有」。
+2. `insert_text` 在键入前连查两道：抢前台失败 → `target_not_focusable`，180ms 后前台又被抢走 → `target_lost_focus`，两个都是**一个字符都不打**，且不可重试（`retry_allowed=false`），避免模型把环境问题当成参数问题反复试。
+
+修完自检全绿：
+
+```
+阶段3 抢回前台=True 系统真实前台=xiaoliu.exe WPF_IsActive=True
+阶段4 期望 30 字 / 送出 30 键 / 收到 30 字 / ok=True
+```
+
+复跑命令：`xiaoliu.exe --demo typing`，退出码 0 = 通过。它自带一个记事本当「别人占着前台」的对照组，跑完自己收尾。
+
+为了能测「抢不到前台就不许打字」这条，`ToolDispatcher` 的窗口操作抽成了 `IWindowWriter`（`Focus` / `IsForeground` / `Type`），生产实现直接落 Win32，测试用桩断言 `Type` 从未被调用 —— `InsertTextFocusTests` 四条。
+
 ## 与点点的对照（实现时逐条核对过）
 
 | 环节 | 点点 | xiaoliu |
@@ -58,12 +101,24 @@
 
 ## 代码规模
 
-`src/Xiaoliu.Core` 约 2.6k 行（协议 4 文件、工具 2、取图 2、指点 1、存储 1、语音 1、Agent 2）
-`src/Xiaoliu.App` 约 1.1k 行（外壳 1、编排 1、窗口 4、音频 1、热键 1）
+`src/Xiaoliu.Core` 3379 行 / 17 文件（协议 5、工具 2、取图 2、指点 1、存储 1、语音 1、Agent 2、Interop 2、配置 1）
+`src/Xiaoliu.App` 1861 行 / 12 文件（外壳 1、编排 1、窗口 4、音频 1、热键 1、自检 1、其余 3）
+`tests/Xiaoliu.Core.Tests` 620 行 / 5 文件（35 项）
 
 ## 还没做的
 
-1. **单文件发布没跑过**：`dotnet publish` 的配置写好了，没验证产物能否在干净机器上起。
-2. **语音整链没有真人验证**：ASR 和 TTS 分别验过，但「按住热键 → 听到回答」这一步需要人按键（低级键盘钩子不收合成输入）。
-3. **多屏未测**：取图与 overlay 都按虚拟桌面并集写，只有一块屏的机器上验过。
-4. **`insert_text` 没实机验证**：`SendInput` 逐字键入的路径没在真实目标窗口上跑过。
+1. **语音整链没有真人验证**：ASR 和 TTS 分别验过，但「按住热键 → 听到回答」这一步需要人按键（低级键盘钩子不收合成输入）。
+2. **多屏未测**：取图与 overlay 都按虚拟桌面并集写，只有一块屏的机器上验过。
+3. **`insert_text` 只在自检靶子上验过**：抢前台 + 键入全链路通了，但没往真实第三方应用（记事本以外的）里填过；富文本/自绘控件可能另有脾气。
+
+## 挂起的 P0：按用户决定不动
+
+交接文档第 5 步要求「联调跑通后清 hosts + 删自签 CA」。这次问过用户，选择**先不动**，等整机不再需要自建服务端时一起清。
+
+查证结果记在这里，将来动手时不用重新摸：
+
+- `C:\Windows\System32\drivers\etc\hosts` 第 28–32 行，5 条指向 `127.0.0.1`：`update.discord.com` + `api/user/dl/proxy.botlearn.com.cn`
+- 自签 CA `CN=xiaoliu probe CA`，指纹 `F0991C42BF9FEECEDF2DC489B655ED6CA70D960E`，`CurrentUser\Root` 与 `LocalMachine\Root` **两处都在**
+- `probe/hosts-off.bat` 不能直接用：它只过滤 `botlearn`，`update.discord.com` 会留下；而且用 `Set-Content -Encoding UTF8` 会写 BOM，hosts 带 BOM 有解析风险
+- **xiaoliu 不依赖这两项**：直连 `https://127.0.0.1/diandian/proxy`（字面 IP，不走 DNS），且 `AllowUntrustedTls=true` 跳过证书校验。所以将来清理不会影响 xiaoliu，受影响的只有点点（它会回到真云端）
+

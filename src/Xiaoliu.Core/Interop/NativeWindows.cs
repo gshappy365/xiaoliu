@@ -80,6 +80,26 @@ public static class NativeWindows
     [DllImport("user32.dll")]
     private static extern bool IsIconic(nint hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(nint hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetFocus(nint hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(nint hWnd, nint insertAfter, int x, int y, int cx, int cy, uint flags);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+    private static readonly nint HWND_TOP = 0;
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint count, INPUT[] inputs, int size);
 
@@ -155,14 +175,69 @@ public static class NativeWindows
         return result;
     }
 
+    /// <summary>目标窗口此刻是不是系统眼里的前台窗口。</summary>
+    public static bool IsForeground(nint handle) => handle != 0 && GetForegroundWindow() == handle;
+
+    /// <summary>
+    /// 把窗口切到前台。返回的是「真的切过去了没有」——以 GetForegroundWindow 为准。
+    ///
+    /// 直接调 SetForegroundWindow 在后台进程里会被前台锁挡掉，而且它只返回 false
+    /// 不抛异常，调用方很容易以为成功了。实测（自检 --demo typing）：WPF 的 IsActive
+    /// 会显示 true，但系统真实前台还是别的进程，接着键入的字符就全打进了那个进程里。
+    /// 所以这里把本线程的输入队列临时挂到「当前前台线程」和「目标线程」上，
+    /// 前台锁只拦非前台线程，挂上之后这次交接就是合法的。
+    /// </summary>
     public static bool Focus(nint handle)
     {
+        if (handle == 0)
+        {
+            return false;
+        }
+
         if (IsIconic(handle))
         {
             ShowWindow(handle, SW_RESTORE);
         }
 
-        return SetForegroundWindow(handle);
+        if (GetForegroundWindow() == handle)
+        {
+            return true;
+        }
+
+        var currentThread = GetCurrentThreadId();
+        var targetThread = GetWindowThreadProcessId(handle, out _);
+        var foreground = GetForegroundWindow();
+        var foregroundThread = foreground == 0 ? 0u : GetWindowThreadProcessId(foreground, out _);
+
+        var attached = new List<uint>(2);
+        try
+        {
+            if (foregroundThread != 0 && foregroundThread != currentThread &&
+                AttachThreadInput(currentThread, foregroundThread, true))
+            {
+                attached.Add(foregroundThread);
+            }
+
+            if (targetThread != 0 && targetThread != currentThread && targetThread != foregroundThread &&
+                AttachThreadInput(currentThread, targetThread, true))
+            {
+                attached.Add(targetThread);
+            }
+
+            BringWindowToTop(handle);
+            SetWindowPos(handle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            SetForegroundWindow(handle);
+            SetFocus(handle);
+        }
+        finally
+        {
+            foreach (var thread in attached)
+            {
+                AttachThreadInput(currentThread, thread, false);
+            }
+        }
+
+        return GetForegroundWindow() == handle;
     }
 
     /// <summary>按 Unicode 逐字符键入。换行转成回车，其余原样。不发送回车结尾。</summary>
