@@ -1,0 +1,20 @@
+# 反编译产物：闭源代码不进版本库
+reference/
+artifacts/
+*.user
+*.suo
+
+# 构建
+bin/
+obj/
+publish/
+
+# 本地运行产物
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# 测试与临时
+TestResults/
+.vs/

@@ -1,0 +1,14 @@
+<Window x:Class="Xiaoliu.App.SelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="#66000000"
+        ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
+        Cursor="Cross" WindowStartupLocation="Manual">
+    <Canvas x:Name="Surface" Background="Transparent">
+        <Rectangle x:Name="Selection" Stroke="#FF4C8DFF" StrokeThickness="2"
+                   Fill="#224C8DFF" Visibility="Collapsed" />
+        <TextBlock x:Name="Hint" Text="拖拽选择要我看的区域，Esc 取消"
+                   Foreground="#FFE8EAF0" FontSize="16" Background="#CC14161C"
+                   Padding="14,8" Canvas.Left="40" Canvas.Top="40" />
+    </Canvas>
+</Window>

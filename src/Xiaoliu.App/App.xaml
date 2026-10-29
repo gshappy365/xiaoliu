@@ -1,0 +1,9 @@
+<Application x:Class="Xiaoliu.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="PanelBackground" Color="#F21E1E20" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF4C8DFF" />
+        <SolidColorBrush x:Key="MutedText" Color="#FFB9BCC4" />
+    </Application.Resources>
+</Application>
