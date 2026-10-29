@@ -41,6 +41,10 @@ public sealed class Companion : IDisposable
     private string _lastQuestion = string.Empty;
     private int _flushedLength;
 
+    // 本轮采集的粗略电平，只为诊断「按住说话没反应」：到底是没录到声音，还是录到了但识别没结果。
+    private int _capturePeak;
+    private long _captureBytes;
+
     public Companion(AppSettings settings, SubtitleWindow subtitle, OverlayWindow overlay)
     {
         _settings = settings;
@@ -154,6 +158,9 @@ public sealed class Companion : IDisposable
                 return;
             }
 
+            _capturePeak = 0;
+            _captureBytes = 0;
+
             var uri = WireProtocol.WebSocketUri(_settings.BaseUri, WireProtocol.AsrPath);
             var session = await AsrSession.ConnectAsync(uri, AudioEngine.CaptureSampleRate, token, _settings.AllowUntrustedTls);
             session.PartialReceived += text =>
@@ -179,6 +186,8 @@ public sealed class Companion : IDisposable
 
     private void OnAudioCaptured(byte[] chunk)
     {
+        TrackLevel(chunk);
+
         var session = _asr;
         if (session is null)
         {
@@ -198,6 +207,20 @@ public sealed class Companion : IDisposable
         _ = SendAudioAsync(session, chunk);
     }
 
+    /// <summary>只统计峰值和字节数 —— 这段跑在音频线程上，别的什么都不做。</summary>
+    private void TrackLevel(byte[] chunk)
+    {
+        _captureBytes += chunk.Length;
+        for (var i = 0; i + 1 < chunk.Length; i += 2)
+        {
+            var magnitude = Math.Abs((int)BitConverter.ToInt16(chunk, i));
+            if (magnitude > _capturePeak)
+            {
+                _capturePeak = magnitude;
+            }
+        }
+    }
+
     private async Task SendAudioAsync(AsrSession session, byte[] chunk)
     {
         try
@@ -215,6 +238,20 @@ public sealed class Companion : IDisposable
         _audio.StopRecording();
         var session = _asr;
         _asr = null;
+
+        var seconds = _captureBytes / 2.0 / AudioEngine.CaptureSampleRate;
+        var peakRatio = _capturePeak / 32768.0;
+        Log.Info("audio", $"本轮采集 {seconds:F1}s peak={peakRatio:F4} 设备={_audio.LastCaptureDeviceName ?? "未知"}");
+
+        // 一点声音都没有时直接说清楚，别让服务器那边的静音检测去猜。
+        if (peakRatio < 0.005 && session is not null)
+        {
+            await DisposeQuietlyAsync(session);
+            Log.Info("audio", "采集电平接近静音，未送识别");
+            Ui(() => _subtitle.ShowTransient(
+                $"没收到声音（设备：{_audio.LastCaptureDeviceName ?? "未知"}）。检查麦克风，或用 --demo mic 换个设备序号。", "小柳"));
+            return;
+        }
 
         // 按不到 250ms 是误触（和点点的阈值一致）：直接丢弃，不要白跑一次识别。
         if (held < TimeSpan.FromMilliseconds(_settings.PushToTalkHoldMilliseconds) || session is null)
