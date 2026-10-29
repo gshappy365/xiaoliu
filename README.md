@@ -39,6 +39,8 @@ xiaoliu.exe --demo typing   # 退出码 0 = 通过
 
 `%LOCALAPPDATA%\xiaoliu\settings.json`，首次运行不自动创建（用默认值跑），改过设置后才会写出来。
 
+**改这个文件前先退出小柳**：配置是整份读进内存的，退出或改设置时会整份写回，运行期间手改会被覆盖。
+
 ```json
 {
   "BaseUrl": "https://127.0.0.1/diandian/proxy",
