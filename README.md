@@ -22,7 +22,7 @@ dotnet publish src/Xiaoliu.App/Xiaoliu.App.csproj -c Release   # 单文件 exe
 
 产物：`src/Xiaoliu.App/bin/Release/net8.0-windows/win-x64/publish/xiaoliu.exe`
 
-开发时直接跑 `dotnet run --project src/Xiaoliu.App`。加 `--demo` 会把四种指点图形一次画出来，调样式用。
+开发时直接跑 `dotnet run --project src/Xiaoliu.App`。加 `--demo` 会把四种指点图形一次画出来；加 `--demo ui` 连顶部胶囊和回答气泡一起摆出来（截图见 `artifacts/ui-v2-bubble.jpg`）。
 
 ### 自检：`--demo typing`
 
@@ -90,7 +90,7 @@ xiaoliu.exe --demo typing   # 退出码 0 = 通过
 | 圈选一块区域 | Ctrl + Alt + S，拖框，松手即取图 |
 | 清空指点图形与截图 | Esc |
 | 打断正在念的回答 | 再按一次 Ctrl + Alt |
-| 历史 / 退出 | 托盘菜单 |
+| 历史 / 退出 | 托盘菜单，或点顶部胶囊 |
 
 ## 已知限制
 

@@ -29,4 +29,16 @@ internal static class WindowInterop
         SetWindowLong(handle, GWL_EXSTYLE,
             style | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED);
     }
+
+    /// <summary>
+    /// 能点，但点击不激活、不进 Alt+Tab。给常驻胶囊用：
+    /// 点它打开历史可以，把用户正在打字的窗口切走不行。
+    /// </summary>
+    public static void MakeNoActivate(Window window)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        var style = GetWindowLong(handle, GWL_EXSTYLE);
+        SetWindowLong(handle, GWL_EXSTYLE,
+            style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED);
+    }
 }

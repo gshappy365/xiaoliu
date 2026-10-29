@@ -3,16 +3,29 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
-        SizeToContent="Height" Width="760" Focusable="False">
-    <Border Background="{StaticResource PanelBackground}" CornerRadius="16" Padding="20,14" Margin="12">
+        Width="320" MinHeight="96" MaxHeight="176" SizeToContent="Height" Focusable="False">
+    <!-- 回答气泡：320×96，跟着指点目标浮动（对齐点点的 AnswerBubble 尺寸与锚定方式）。
+         内容超过三行就截断 —— 完整回答在历史窗里看。 -->
+    <Border CornerRadius="18" Padding="14,10" Margin="8">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#F52A2C32" Offset="0" />
+                <GradientStop Color="#F2191B1F" Offset="1" />
+            </LinearGradientBrush>
+        </Border.Background>
         <Border.Effect>
-            <DropShadowEffect BlurRadius="24" ShadowDepth="2" Opacity="0.45" Color="Black" />
+            <DropShadowEffect BlurRadius="24" ShadowDepth="3" Opacity="0.5" Color="Black" />
         </Border.Effect>
-        <StackPanel>
-            <TextBlock x:Name="StatusText" Foreground="{StaticResource MutedText}" FontSize="12"
-                       Margin="2,0,0,6" Text="小柳" />
-            <TextBlock x:Name="BodyText" Foreground="White" FontSize="20" LineHeight="30"
-                       TextWrapping="Wrap" MaxHeight="120" />
-        </StackPanel>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="StatusText" Foreground="{StaticResource MutedText}" FontSize="11"
+                       Text="小柳" />
+            <TextBlock x:Name="BodyText" Grid.Row="1" Foreground="#FFF2F4F8" FontSize="14"
+                       LineHeight="20" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                       Margin="0,4,0,0" />
+        </Grid>
     </Border>
 </Window>

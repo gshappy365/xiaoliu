@@ -23,6 +23,7 @@ public sealed class TrayHost : IDisposable
     private readonly NotifyIcon _tray;
     private readonly HotkeyHook _hotkeys;
     private readonly SubtitleWindow _subtitle;
+    private readonly PillWindow _pill;
     private readonly OverlayWindow _overlay;
     private readonly Companion _companion;
 
@@ -40,6 +41,9 @@ public sealed class TrayHost : IDisposable
         _tray.DoubleClick += (_, _) => ShowHistory();
 
         _subtitle = new SubtitleWindow();
+        _pill = new PillWindow();
+        _pill.Clicked += ShowHistory;
+        _subtitle.StatusChanged += status => _pill.SetStatus(status);
         _overlay = new OverlayWindow();
         _companion = new Companion(settings, _subtitle, _overlay);
 
@@ -56,13 +60,25 @@ public sealed class TrayHost : IDisposable
         ApplyLaunchAtLogin(_settings.LaunchAtLogin);
         SweepOnStartup();
 
-        // 托盘菜单之外没有任何 UI，所以不能靠「最后一个窗口关闭」来退出。
+        // 托盘菜单之外没有主窗口，所以不能靠「最后一个窗口关闭」来退出。
         Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        _subtitle.ShowTransient("小柳在托盘里。按住 Ctrl+Alt 说话，Ctrl+Alt+S 圈选一块区域给我看。", "小柳");
 
-        if (Environment.GetCommandLineArgs().Contains("--demo"))
+        // 常驻胶囊：屏幕顶部一直有个「小柳」在那儿，按完热键知道该看哪里。
+        _pill.Show();
+        _subtitle.ShowTransient("按住 Ctrl+Alt 说话，Ctrl+Alt+S 圈选一块区域给我看。", "小柳");
+
+        var args = Environment.GetCommandLineArgs();
+        var demoAt = Array.IndexOf(args, "--demo");
+        if (demoAt >= 0)
         {
-            DrawDemoMarks();
+            var point = DrawDemoMarks();
+
+            // --demo ui 顺带把气泡挂到那个点上，一眼就能看出「回答跟着指点走」。
+            if (demoAt + 1 < args.Length && string.Equals(args[demoAt + 1], "ui", StringComparison.OrdinalIgnoreCase))
+            {
+                _subtitle.AnchorBounds = point;
+                _subtitle.ShowText("这里是命令面板，点右上角的齿轮可以改主题。", "小柳");
+            }
         }
     }
 
@@ -70,7 +86,7 @@ public sealed class TrayHost : IDisposable
     /// 开发用：把四种指点图形一次画出来看效果。真实链路要等一次语音往返，
     /// 调样式时没必要每次都说话。
     /// </summary>
-    private void DrawDemoMarks()
+    private Core.Capture.CaptureRect DrawDemoMarks()
     {
         var area = Core.Capture.ScreenCapture.VirtualScreenBounds();
         var x = area.X + area.Width / 4;
@@ -84,13 +100,14 @@ public sealed class TrayHost : IDisposable
             Label = "这是一个区域",
             Bounds = new Core.Capture.CaptureRect(x, y, 320, 120),
         });
+        var point = new Core.Capture.CaptureRect(x + 460, y + 40, 1, 1);
         _overlay.Draw(new Core.Visual.GuidanceMark
         {
             Id = Guid.NewGuid(),
             Kind = Core.Visual.GuidanceKind.Point,
             ScreenNumber = 1,
             Label = "这是一个点",
-            Bounds = new Core.Capture.CaptureRect(x + 460, y + 40, 1, 1),
+            Bounds = point,
         });
         _overlay.Draw(new Core.Visual.GuidanceMark
         {
@@ -110,6 +127,8 @@ public sealed class TrayHost : IDisposable
             Bounds = new Core.Capture.CaptureRect(x, y + 420, 1, 1),
             Second = new Core.Capture.CaptureRect(x + 420, y + 420, 1, 1),
         });
+
+        return point;
     }
 
     private ContextMenuStrip BuildMenu()

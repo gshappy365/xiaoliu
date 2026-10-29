@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using Xiaoliu.Core.Capture;
 using Xiaoliu.Core.Visual;
@@ -88,25 +89,32 @@ public partial class OverlayWindow : Window
         var x = mark.Bounds.X - _origin.X;
         var y = mark.Bounds.Y - _origin.Y;
 
-        var halo = new Ellipse
-        {
-            Width = 44,
-            Height = 44,
-            Stroke = brush,
-            StrokeThickness = 3,
-            Opacity = 0.9,
-        };
-        Canvas.SetLeft(halo, x - 22);
-        Canvas.SetTop(halo, y - 22);
-        Surface.Children.Add(halo);
+        // 软边光环，不是细圆环：外半径 44、内半径 31（环宽 13），加模糊做出发光边。
+        // 尺寸和点点的 PointingOverlayWindow 一致 —— 细圆环看着像调试标记，光环才像「指着这儿」。
+        const double outer = 88;
+        const double thickness = 13;
 
-        var dot = new Ellipse { Width = 8, Height = 8, Fill = brush };
-        Canvas.SetLeft(dot, x - 4);
-        Canvas.SetTop(dot, y - 4);
+        var ring = new Ellipse
+        {
+            Width = outer,
+            Height = outer,
+            Stroke = brush,
+            StrokeThickness = thickness,
+            Opacity = 0.9,
+            Effect = new BlurEffect { Radius = 5 },
+        };
+        Canvas.SetLeft(ring, x - outer / 2);
+        Canvas.SetTop(ring, y - outer / 2);
+        Surface.Children.Add(ring);
+
+        // 环心一个小点，让「指的就是这一个像素」这件事没有歧义。
+        var dot = new Ellipse { Width = 6, Height = 6, Fill = brush, Opacity = 0.95 };
+        Canvas.SetLeft(dot, x - 3);
+        Canvas.SetTop(dot, y - 3);
         Surface.Children.Add(dot);
 
-        Pulse(halo);
-        AddLabel(mark.Label, x + 30, y - 18, brush);
+        Pulse(ring);
+        AddLabel(mark.Label, x + 56, y - 16, brush);
     }
 
     private void DrawHighlight(GuidanceMark mark, Brush brush)
@@ -136,10 +144,10 @@ public partial class OverlayWindow : Window
             Width = mark.Bounds.Width,
             Height = mark.Bounds.Height,
             Stroke = brush,
-            StrokeThickness = 3,
-            RadiusX = 6,
-            RadiusY = 6,
-            Fill = new SolidColorBrush(Color.FromArgb(0x1A, 0x4C, 0x8D, 0xFF)),
+            StrokeThickness = 2,
+            RadiusX = 10,
+            RadiusY = 10,
+            Fill = new SolidColorBrush(Color.FromArgb(0x16, 0x4C, 0x8D, 0xFF)),
         };
         Canvas.SetLeft(box, x);
         Canvas.SetTop(box, y);
@@ -220,8 +228,8 @@ public partial class OverlayWindow : Window
             Height = rect.Height,
             Stroke = brush,
             StrokeThickness = 2,
-            RadiusX = 6,
-            RadiusY = 6,
+            RadiusX = 10,
+            RadiusY = 10,
             Fill = new SolidColorBrush(Color.FromArgb(alpha, 0x4C, 0x8D, 0xFF)),
         };
         Canvas.SetLeft(box, rect.X - _origin.X);
@@ -239,15 +247,13 @@ public partial class OverlayWindow : Window
         var border = new Border
         {
             Background = LabelBackground,
-            BorderBrush = brush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(10),
             Padding = new Thickness(10, 4, 10, 5),
             Child = new TextBlock
             {
                 Text = text,
                 Foreground = Brushes.White,
-                FontSize = 14,
+                FontSize = 13,
                 MaxWidth = 360,
                 TextWrapping = TextWrapping.Wrap,
             },

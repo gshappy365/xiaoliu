@@ -56,7 +56,14 @@ public sealed class Companion : IDisposable
         _chat = new ChatClient(settings);
         _dispatcher = new ToolDispatcher(settings, _evidence, _history)
         {
-            GuidanceRequested = mark => Ui(() => _overlay.Draw(mark)),
+            GuidanceRequested = mark => Ui(() =>
+            {
+                _overlay.Draw(mark);
+
+                // 回答气泡跟着它指的地方走 —— 回答出现在被指的东西旁边，
+                // 用户不用在「屏幕顶部」和「被指的位置」之间来回看。
+                _subtitle.AnchorBounds = mark.Bounds;
+            }),
             NoticeRequested = text => Ui(() => _subtitle.ShowTransient(text, "小柳")),
             TargetProvider = NativeWindows.ListVisibleWindows,
             Executed = (call, result) =>
@@ -122,6 +129,7 @@ public sealed class Companion : IDisposable
         Interrupt();
         _overlay.Clear();
         _evidence.Clear();
+        _subtitle.AnchorBounds = null;
         _subtitle.HideNow();
     }
 
@@ -295,7 +303,11 @@ public sealed class Companion : IDisposable
         try
         {
             // 上一轮的标注不跨轮；截图按内容判活，过时的丢掉，还准的留着。
-            Ui(() => _overlay.Clear());
+            Ui(() =>
+            {
+                _overlay.Clear();
+                _subtitle.AnchorBounds = null;
+            });
             var pruned = _evidence.Prune();
             if (pruned > 0)
             {
