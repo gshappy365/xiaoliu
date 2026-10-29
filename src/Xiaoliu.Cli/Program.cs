@@ -3,6 +3,7 @@ using System.Text;
 using Xiaoliu.Core.Agent;
 using Xiaoliu.Core.Capture;
 using Xiaoliu.Core.Configuration;
+using Xiaoliu.Core.Interop;
 using Xiaoliu.Core.Protocol;
 using Xiaoliu.Core.Storage;
 using Xiaoliu.Core.Tools;
@@ -37,6 +38,8 @@ internal static class Program
                 "tts" => await TtsAsync(settings, args.Skip(1).ToArray()),
                 "tools" => Tools(),
                 "shot" => Shot(args.Skip(1).ToArray()),
+                "windows" => Windows(args.Skip(1).ToArray()),
+                "type" => TypeInto(args.Skip(1).ToArray()),
                 _ => Unknown(args[0]),
             };
         }
@@ -57,6 +60,8 @@ internal static class Program
               asr 文件.wav                    把 16k/16bit 单声道 wav 送进 ASR 中继
               tts "文字" [--out 文件.wav]      合成并落盘
               tools                           打印本轮声明的 14 个工具
+              windows [过滤词] [--hidden]      列出顶层窗口（句柄、进程、位置、可见性）
+              type "窗口标题" "文本"            把文字打进那个窗口（先抢前台）
 
             配置：%LOCALAPPDATA%\xiaoliu\settings.json（不存在则用默认值）
             """);
@@ -247,6 +252,64 @@ internal static class Program
     }
 
     /// <summary>把整块虚拟屏幕抓成 jpg，给 chat --image 当圈选替身。</summary>
+    private static int Windows(string[] args)
+    {
+        var includeHidden = args.Contains("--hidden");
+        var filter = args.FirstOrDefault(a => a != "--hidden" && a != "--all");
+        var all = NativeWindows.ListVisibleWindows(
+            includeUntitled: true,
+            includeHidden: includeHidden,
+            dedupeByProcess: !args.Contains("--all"));
+
+        Console.WriteLine($"顶层窗口 {all.Count} 个（按进程名去重，含无标题{(includeHidden ? "、含隐藏" : "")}）");
+        foreach (var window in all)
+        {
+            if (filter is not null &&
+                !window.ProcessName.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+                !window.Title.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var bounds = NativeWindows.WindowBounds(window.Handle);
+            Console.WriteLine(
+                $"0x{window.Handle:X8}  {window.ProcessName,-28} {bounds.X,6},{bounds.Y,-6} " +
+                $"{bounds.Width,5}x{bounds.Height,-5} {(window.Visible ? "可见" : "隐藏")} {(window.IsForeground ? "前台" : "    ")} {window.Title}");
+        }
+
+        return 0;
+    }
+
+    /// <summary>把文字打进标题匹配的第一个窗口，用来调试主窗口和 insert_text 的底层。</summary>
+    private static int TypeInto(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("用法：type <窗口标题关键字> <文本>");
+            return 1;
+        }
+
+        var match = NativeWindows.ListVisibleWindows()
+            .FirstOrDefault(w => w.Title.Contains(args[0], StringComparison.OrdinalIgnoreCase));
+
+        if (match is null)
+        {
+            Console.Error.WriteLine($"找不到标题含「{args[0]}」的窗口");
+            return 1;
+        }
+
+        if (!NativeWindows.Focus(match.Handle))
+        {
+            Console.Error.WriteLine($"没能把 {match.ProcessName} 切到前台，一个字符都没发");
+            return 1;
+        }
+
+        Thread.Sleep(200);
+        var typed = NativeWindows.TypeText(args[1]);
+        Console.WriteLine($"已向 {match.ProcessName}（{match.Title}）发送 {typed} 个字符");
+        return 0;
+    }
+
     private static int Shot(string[] args)
     {
         var outPath = args.FirstOrDefault() ?? "screen.jpg";

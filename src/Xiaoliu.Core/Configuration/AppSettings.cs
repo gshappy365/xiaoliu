@@ -45,6 +45,12 @@ public sealed class AppSettings
 
     public bool ShowCursor { get; set; } = true;
 
+    /// <summary>屏幕顶部那个常驻胶囊。关掉后只剩托盘图标。</summary>
+    public bool ShowPill { get; set; } = true;
+
+    /// <summary>回答气泡跟着指点目标浮动（ADR 0005）。关掉就固定贴在胶囊下方。</summary>
+    public bool BubbleFollowsTarget { get; set; } = true;
+
     /// <summary>字幕条是否显示 ASR 中间结果。</summary>
     public bool ShowAsrPartial { get; set; } = true;
 

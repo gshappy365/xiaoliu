@@ -2,8 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <SolidColorBrush x:Key="PanelBackground" Color="#F21E1E20" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#FF4C8DFF" />
-        <SolidColorBrush x:Key="MutedText" Color="#FFB9BCC4" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- 胶囊与字幕条还在用这两个旧键，保留别名免得改两个窗口 -->
+            <SolidColorBrush x:Key="PanelBackground" Color="#F21E1E20" />
+            <SolidColorBrush x:Key="MutedText" Color="#FFB9BCC4" />
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

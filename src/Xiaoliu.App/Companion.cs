@@ -45,13 +45,14 @@ public sealed class Companion : IDisposable
     private int _capturePeak;
     private long _captureBytes;
 
-    public Companion(AppSettings settings, SubtitleWindow subtitle, OverlayWindow overlay)
+    public Companion(AppSettings settings, SubtitleWindow subtitle, OverlayWindow overlay,
+        VisualEvidence? evidence = null)
     {
         _settings = settings;
         _subtitle = subtitle;
         _overlay = overlay;
 
-        _evidence = new VisualEvidence();
+        _evidence = evidence ?? new VisualEvidence();
         _history = HistoryStore.OpenDefault(settings);
         _chat = new ChatClient(settings);
         _dispatcher = new ToolDispatcher(settings, _evidence, _history)
@@ -65,7 +66,7 @@ public sealed class Companion : IDisposable
                 _subtitle.AnchorBounds = mark.Bounds;
             }),
             NoticeRequested = text => Ui(() => _subtitle.ShowTransient(text, "小柳")),
-            TargetProvider = NativeWindows.ListVisibleWindows,
+            TargetProvider = () => NativeWindows.ListVisibleWindows(),
             Executed = (call, result) =>
             {
                 var error = result["is_error"]?.GetValue<bool>() ?? false;
@@ -80,12 +81,32 @@ public sealed class Companion : IDisposable
         _audio.CaptureDeviceNumber = settings.CaptureDeviceNumber;
     }
 
+    /// <summary>主窗口要读它来显示「这一轮可以看到的画面」，所以暴露出来而不是再开一份。</summary>
+    public VisualEvidence Evidence => _evidence;
+
+    /// <summary>一轮对话结束（语音和打字都算），给主窗口的对话页刷新用。</summary>
+    public event Action<string, string>? TurnFinished;
+
     public VisualEvidence.Shot AddSelection(CaptureRect rect, CapturedImage image)
     {
         var shot = _evidence.Add(rect, image);
         Log.Info("capture", $"圈选 {shot.CaptureCallId} {rect.Width}x{rect.Height} hash={image.ContentHash[..8]}");
         return shot;
     }
+
+    /// <summary>用户从磁盘选的一张图，和圈选走同一套证据池。</summary>
+    public VisualEvidence.Shot AddImage(CapturedImage image)
+    {
+        var shot = _evidence.AddImage(image);
+        Log.Info("capture", $"选图 {shot.CaptureCallId} {image.Width}x{image.Height} hash={image.ContentHash[..8]}");
+        return shot;
+    }
+
+    /// <summary>
+    /// 主窗口打字发问：同一套编排，但不接语音（用户正在看窗口，突然念出来很吵）。
+    /// </summary>
+    public Task AskTextAsync(string question) =>
+        RunTurnAsync(question, _turn?.Token ?? CancellationToken.None, speak: false);
 
     // ---------------------------------------------------------------- 热键
 
@@ -298,7 +319,7 @@ public sealed class Companion : IDisposable
 
     // ---------------------------------------------------------------- 想
 
-    private async Task RunTurnAsync(string question, CancellationToken token)
+    private async Task RunTurnAsync(string question, CancellationToken token, bool speak = true)
     {
         try
         {
@@ -317,15 +338,23 @@ public sealed class Companion : IDisposable
             Ui(() => _subtitle.ShowStatus("在想…"));
 
             // TTS 与模型请求并行起来：等模型答完再连语音，首声会多等一个握手。
-            var ttsUri = WireProtocol.WebSocketUri(_settings.BaseUri, WireProtocol.TtsPath);
-            _tts = await TryConnectTtsAsync(ttsUri, token);
+            // 打字提问不念出来，就别白连一条 WebSocket。
+            if (speak)
+            {
+                var ttsUri = WireProtocol.WebSocketUri(_settings.BaseUri, WireProtocol.TtsPath);
+                _tts = await TryConnectTtsAsync(ttsUri, token);
+            }
 
             var result = await _agent.RunTurnAsync(question, BuildRuntimeContext(), token);
 
             Ui(() => _subtitle.ShowText(result.Text, "小柳"));
-            await FinishSpeechAsync(result.Text, token);
+            if (speak)
+            {
+                await FinishSpeechAsync(result.Text, token);
+            }
 
             Save(question, result);
+            TurnFinished?.Invoke(question, result.Text);
             Log.Info("turn", $"stop={result.StopReason} 请求={result.ModelRequests} 工具={result.ToolCalls} 字数={result.Text.Length}");
         }
         catch (OperationCanceledException)

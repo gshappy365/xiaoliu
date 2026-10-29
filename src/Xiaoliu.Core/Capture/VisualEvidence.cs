@@ -38,6 +38,17 @@ public sealed class VisualEvidence
         return shot;
     }
 
+    /// <summary>
+    /// 登记一张用户从磁盘选来的图。它不是抓屏来的，没有「那块屏幕变了没有」这回事，
+    /// 所以 Rect 留零、判活时直接放行 —— 否则下一次 Prune 会把它当过期图删掉。
+    /// </summary>
+    public Shot AddImage(CapturedImage image)
+    {
+        var shot = new Shot($"selection-{++_sequence}", 1, default, image, DateTimeOffset.UtcNow);
+        _shots.Add(shot);
+        return shot;
+    }
+
     public bool TryGet(string captureCallId, int screenNumber, out Shot shot)
     {
         shot = _shots.FirstOrDefault(s =>
@@ -47,8 +58,16 @@ public sealed class VisualEvidence
     }
 
     /// <summary>屏幕内容变了没有。变了就是 stale，不是过期。</summary>
-    public bool StillValid(Shot shot) =>
-        shot.Image.Signature is { Length: > 0 } signature && _stillMatches(shot.Rect, signature);
+    public bool StillValid(Shot shot)
+    {
+        if (shot.Image.Signature is not { Length: > 0 } signature)
+        {
+            return false;
+        }
+
+        // 零矩形 = 用户选的图，不是抓屏来的，没有可比对的屏幕区域。
+        return shot.Rect.Width <= 0 || shot.Rect.Height <= 0 || _stillMatches(shot.Rect, signature);
+    }
 
     /// <summary>下一轮对话开始时清空（点点的老截图引用不能跨轮复用）。</summary>
     public void Clear()

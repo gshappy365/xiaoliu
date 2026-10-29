@@ -1,10 +1,15 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Xiaoliu.Core.Capture;
 
 namespace Xiaoliu.Core.Interop;
 
-public sealed record TargetWindow(string ProcessName, string Title, nint Handle, bool IsForeground);
+public sealed record TargetWindow(string ProcessName, string Title, nint Handle, bool IsForeground)
+{
+    /// <summary>只有枚举调试时才关心：窗口此刻是不是可见的。</summary>
+    public bool Visible { get; init; } = true;
+}
 
 /// <summary>
 /// Win32 薄封装：列窗口、聚焦、键入、剪贴板。
@@ -124,11 +129,42 @@ public static class NativeWindows
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GlobalUnlock(nint handle);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetWindowRect(nint hWnd, out RECT rect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    /// <summary>窗口在屏幕上的矩形（物理像素）。取不到时返回零矩形。</summary>
+    public static CaptureRect WindowBounds(nint handle)
+    {
+        if (!GetWindowRect(handle, out var rect))
+        {
+            return default;
+        }
+
+        return new CaptureRect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+    }
+
     private const uint GMEM_MOVEABLE = 0x0002;
     private const uint CF_UNICODETEXT = 13;
 
-    /// <summary>当前所有可见的顶层窗口，按进程名去重（insert_text 的白名单就从这里来）。</summary>
-    public static IReadOnlyList<TargetWindow> ListVisibleWindows()
+    /// <summary>
+    /// 当前所有可见的顶层窗口，按进程名去重（insert_text 的白名单就从这里来）。
+    ///
+    /// includeUntitled 默认 false：无标题窗口对「往哪个窗口填字」没有意义。
+    /// 但常驻型浮层（点点的顶部胶囊、小柳自己的胶囊）恰恰没有标题，调试时要看得到。
+    /// </summary>
+    public static IReadOnlyList<TargetWindow> ListVisibleWindows(
+        bool includeUntitled = false,
+        bool includeHidden = false,
+        bool dedupeByProcess = true)
     {
         var foreground = GetForegroundWindow();
         var result = new List<TargetWindow>();
@@ -136,7 +172,7 @@ public static class NativeWindows
 
         EnumWindows((handle, _) =>
         {
-            if (!IsWindowVisible(handle))
+            if (!includeHidden && !IsWindowVisible(handle))
             {
                 return true;
             }
@@ -144,7 +180,10 @@ public static class NativeWindows
             var title = new StringBuilder(512);
             if (GetWindowText(handle, title, title.Capacity) == 0 || title.Length == 0)
             {
-                return true;
+                if (!includeUntitled)
+                {
+                    return true;
+                }
             }
 
             GetWindowThreadProcessId(handle, out var pid);
@@ -163,12 +202,15 @@ public static class NativeWindows
                 return true;
             }
 
-            if (!seen.Add(processName))
+            if (dedupeByProcess && !seen.Add(processName))
             {
                 return true;
             }
 
-            result.Add(new TargetWindow(processName, title.ToString(), handle, handle == foreground));
+            result.Add(new TargetWindow(processName, title.ToString(), handle, handle == foreground)
+            {
+                Visible = IsWindowVisible(handle),
+            });
             return true;
         }, 0);
 

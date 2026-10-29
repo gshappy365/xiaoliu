@@ -1,0 +1,377 @@
+<Window x:Class="Xiaoliu.App.WorkspaceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Xiaoliu.App"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="小柳" Width="1000" Height="680" MinWidth="860" MinHeight="560"
+        WindowStyle="None" Background="{StaticResource CanvasBrush}"
+        Foreground="{StaticResource TextBrush}" FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Display"
+        WindowStartupLocation="CenterScreen">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="6"
+                            CornerRadius="12" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border CornerRadius="12" Background="{StaticResource CanvasBrush}"
+            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- ============================================================ 标题栏 -->
+            <Grid Grid.Row="0" Margin="16,0,8,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="小柳" FontSize="13" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock x:Name="CaptionStatus" FontSize="11" Foreground="{StaticResource MutedBrush}"
+                               Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Content="&#xE921;" Style="{StaticResource CaptionButton}" Click="OnMinimizeClick" ToolTip="最小化" />
+                    <Button Content="&#xE8BB;" Style="{StaticResource CaptionButton}" Click="OnCloseClick" ToolTip="关闭" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="232" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ==================================================== 侧栏 -->
+                <Border Grid.Column="0" Background="{StaticResource SidebarBrush}" CornerRadius="0,0,0,11">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <ListBox x:Name="Nav" Grid.Row="0" Margin="0,10,0,0" Background="Transparent"
+                                 BorderThickness="0" ItemContainerStyle="{StaticResource NavItemStyle}"
+                                 SelectionChanged="OnNavSelectionChanged">
+                            <ListBoxItem Content="对话" Tag="home" />
+                            <ListBoxItem Content="历史" Tag="history" />
+                            <ListBoxItem Content="设置" Tag="settings" />
+                        </ListBox>
+
+                        <StackPanel Grid.Row="1" Margin="16,0,16,14">
+                            <TextBlock x:Name="VersionText" FontSize="11" Foreground="{StaticResource MutedBrush}" />
+                            <TextBlock x:Name="EndpointText" FontSize="11" Foreground="{StaticResource MutedBrush}"
+                                       TextTrimming="CharacterEllipsis" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ==================================================== 页面 -->
+                <Grid Grid.Column="1">
+
+                    <!-- ======================================== 对话 -->
+                    <Grid x:Name="HomePage" Margin="24,16,24,18">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0">
+                            <TextBlock Text="和小柳说话" Style="{StaticResource TitleText}" />
+                            <TextBlock x:Name="HomeHint" Style="{StaticResource RowDescription}" Margin="0,6,0,0"
+                                       Text="按住 Ctrl+Alt 说话，或者在下面打字。想让我看画面，就先圈选一块区域。" />
+                        </StackPanel>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
+                            <StackPanel>
+                                <Border Background="{StaticResource CardBrush}" CornerRadius="8" Padding="16,14"
+                                        BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock x:Name="LastQuestionText" Style="{StaticResource RowTitle}"
+                                                   Text="还没有对话。" />
+                                        <TextBlock x:Name="LastAnswerText" Style="{StaticResource RowDescription}"
+                                                   Margin="0,8,0,0" Text="按住 Ctrl+Alt 说一句话，回答会出现在屏幕上指的地方。" />
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Text="这一轮可以看到的画面" Style="{StaticResource SectionText}" />
+                                <Border Background="{StaticResource CardBrush}" CornerRadius="8" Padding="16,12"
+                                        BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock x:Name="EvidenceSummary" Style="{StaticResource RowDescription}"
+                                                   Margin="0" Text="还没有圈选任何区域。" />
+                                        <StackPanel x:Name="EvidenceList" Margin="0,8,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <Border Grid.Row="2" Background="{StaticResource CardBrush}" CornerRadius="8" Padding="12"
+                                BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1" Margin="0,14,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBox x:Name="AskBox" Style="{StaticResource BoxStyle}" MinHeight="52"
+                                         MaxHeight="120" AcceptsReturn="True" TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         PreviewKeyDown="OnAskBoxKeyDown" />
+                                <Grid Grid.Row="1" Margin="0,10,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="圈选一块区域" Style="{StaticResource FlatButton}" Click="OnSelectRegionClick" />
+                                        <Button Content="选择图片" Style="{StaticResource FlatButton}" Margin="8,0,0,0" Click="OnPickImageClick" />
+                                        <Button Content="清空画面" Style="{StaticResource FlatButton}" Margin="8,0,0,0" Click="OnClearEvidenceClick" />
+                                    </StackPanel>
+                                    <Button x:Name="SendButton" Content="发送" Style="{StaticResource PrimaryButton}"
+                                            HorizontalAlignment="Right" Padding="20,6" Click="OnSendClick" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- ======================================== 历史 -->
+                    <Grid x:Name="HistoryPage" Margin="24,16,24,18" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0">
+                            <TextBlock Text="历史" Style="{StaticResource TitleText}" />
+                            <TextBlock x:Name="HistorySummary" Style="{StaticResource RowDescription}" Margin="0,6,0,0" />
+                        </StackPanel>
+
+                        <Grid Grid.Row="1" Margin="0,14,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="HistorySearchBox" Style="{StaticResource BoxStyle}" Width="260"
+                                         ToolTip="输入关键词后回车；留空回车等于刷新"
+                                         KeyDown="OnHistorySearchKeyDown" />
+                                <Button Content="搜索" Style="{StaticResource FlatButton}" Margin="8,0,0,0" Click="OnHistorySearchClick" />
+                                <Button Content="刷新" Style="{StaticResource FlatButton}" Margin="8,0,0,0" Click="OnHistoryRefreshClick" />
+                                <Button Content="清空" Style="{StaticResource FlatButton}" Margin="8,0,0,0" Click="OnHistoryClearClick" />
+                            </StackPanel>
+                        </Grid>
+
+                        <DataGrid x:Name="HistoryGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True"
+                                  Background="{StaticResource CardBrush}" Foreground="{StaticResource TextBrush}"
+                                  RowBackground="{StaticResource CardBrush}" AlternatingRowBackground="#FF20232C"
+                                  GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{StaticResource StrokeBrush}"
+                                  BorderBrush="{StaticResource StrokeBrush}" HeadersVisibility="Column"
+                                  CanUserAddRows="False" RowHeight="30" FontSize="12"
+                                  FontFamily="{StaticResource UiFont}" SelectionMode="Single">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="时间" Binding="{Binding CreatedAt, StringFormat='MM-dd HH:mm'}" Width="110" />
+                                <DataGridTextColumn Header="问题" Binding="{Binding Question}" Width="280" />
+                                <DataGridTextColumn Header="回答" Binding="{Binding Answer}" Width="*" />
+                                <DataGridTextColumn Header="截图" Binding="{Binding ScreenshotCount}" Width="56" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+
+                    <!-- ======================================== 设置 -->
+                    <Grid x:Name="SettingsPage" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <ListBox x:Name="SettingsNav" Grid.Column="0" Margin="0,16,0,0" Background="Transparent"
+                                 BorderThickness="0" ItemContainerStyle="{StaticResource NavItemStyle}"
+                                 SelectionChanged="OnSettingsNavSelectionChanged">
+                            <ListBoxItem Content="通用" Tag="general" />
+                            <ListBoxItem Content="语音" Tag="voice" />
+                            <ListBoxItem Content="模型" Tag="model" />
+                            <ListBoxItem Content="外观" Tag="appearance" />
+                            <ListBoxItem Content="数据" Tag="data" />
+                            <ListBoxItem Content="连接" Tag="connection" />
+                            <ListBoxItem Content="关于" Tag="about" />
+                        </ListBox>
+
+                        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="0,0,14,0">
+                            <StackPanel Margin="20,16,10,24">
+
+                                <!-- ============ 通用 ============ -->
+                                <StackPanel x:Name="GeneralPanel">
+                                    <TextBlock Text="启动与热键" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="开机自启" Description="登录 Windows 后在托盘里自动启动">
+                                        <CheckBox x:Name="LaunchAtLoginSwitch" Style="{StaticResource SwitchStyle}" Click="OnLaunchAtLoginChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="按住说话" Description="按住这组键说话，松开就结束；键位在设置文件里改">
+                                        <TextBox x:Name="PushToTalkBox" Style="{StaticResource BoxStyle}" Width="180" IsReadOnly="True" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="圈选区域" Description="按一下进入框选，拖出矩形即取图">
+                                        <TextBox x:Name="SelectRegionBox" Style="{StaticResource BoxStyle}" Width="180" IsReadOnly="True" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="按住多久算说话" Description="短于这个时间按下去算误触，直接丢弃，不白跑一次识别">
+                                        <ComboBox x:Name="HoldPicker" Style="{StaticResource PickerStyle}" Width="180"
+                                                  SelectionChanged="OnHoldChanged" />
+                                    </local:SettingsRowControl>
+
+                                    <TextBlock Text="诊断" Style="{StaticResource SectionText}" />
+                                    <local:SettingsRowControl Title="打字自检" Description="验证 insert_text 能否从别的窗口抢回前台并把字打进去">
+                                        <Button Content="运行" Style="{StaticResource FlatButton}" Click="OnTypingSelfCheckClick" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="日志与配置" Description="排查问题时把日志尾部贴给开发者">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="日志目录" Style="{StaticResource FlatButton}" Click="OnOpenLogsClick" />
+                                            <Button Content="配置文件" Style="{StaticResource FlatButton}" Margin="8,0,0,0" Click="OnOpenSettingsFileClick" />
+                                        </StackPanel>
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                                <!-- ============ 语音 ============ -->
+                                <StackPanel x:Name="VoicePanel" Visibility="Collapsed">
+                                    <TextBlock Text="麦克风" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="录音设备" Description="默认跟随系统。挂虚拟声卡时默认设备可能永远静音">
+                                        <ComboBox x:Name="CaptureDevicePicker" Style="{StaticResource PickerStyle}" Width="220"
+                                                  SelectionChanged="OnCaptureDeviceChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="测试麦克风" Description="录 3 秒并报告电平；接近静音时会直接说没收到声音">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock x:Name="MicLevelText" Style="{StaticResource RowDescription}"
+                                                       Margin="0,0,10,0" VerticalAlignment="Center" Text="" />
+                                            <Button Content="测一下" Style="{StaticResource FlatButton}" Click="OnTestMicClick" />
+                                        </StackPanel>
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="刷新设备列表" Description="插拔麦克风后重新枚举">
+                                        <Button Content="刷新" Style="{StaticResource FlatButton}" Click="OnRefreshDevicesClick" />
+                                    </local:SettingsRowControl>
+
+                                    <TextBlock Text="朗读" Style="{StaticResource SectionText}" />
+                                    <local:SettingsRowControl Title="音色" Description="回答用这个声音念出来">
+                                        <TextBox x:Name="VoicePicker" Style="{StaticResource BoxStyle}" Width="220"
+                                                 LostFocus="OnVoiceCommitted" KeyDown="OnVoiceKeyDown" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="显示识别中间结果" Description="说话时字幕条先显示半句，边识别边刷">
+                                        <CheckBox x:Name="AsrPartialSwitch" Style="{StaticResource SwitchStyle}" Click="OnAsrPartialChanged" />
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                                <!-- ============ 模型 ============ -->
+                                <StackPanel x:Name="ModelPanel" Visibility="Collapsed">
+                                    <TextBlock Text="对话模型" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="模型" Description="服务端接受的模型标识，改错会导致整轮失败">
+                                        <TextBox x:Name="ModelPicker" Style="{StaticResource BoxStyle}" Width="240"
+                                                 LostFocus="OnModelCommitted" KeyDown="OnModelKeyDown" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="推理强度" Description="更高强度允许更多分析，等待可能更久。从下一轮生效">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Slider x:Name="ReasoningSlider" Style="{StaticResource SliderStyle}"
+                                                    Minimum="0" Maximum="2" TickFrequency="1" ValueChanged="OnReasoningChanged" />
+                                            <TextBlock x:Name="ReasoningText" Style="{StaticResource RowDescription}"
+                                                       Margin="10,0,0,0" VerticalAlignment="Center" Width="60" />
+                                        </StackPanel>
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="每轮最多请求" Description="含工具回环；用完就按真实回执收尾，不给模型假装成功的空间">
+                                        <ComboBox x:Name="RequestBudgetPicker" Style="{StaticResource PickerStyle}" Width="120"
+                                                  SelectionChanged="OnRequestBudgetChanged" />
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                                <!-- ============ 外观 ============ -->
+                                <StackPanel x:Name="AppearancePanel" Visibility="Collapsed">
+                                    <TextBlock Text="常驻与指点" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="显示常驻胶囊" Description="屏幕顶部一直有个「小柳」，按完热键知道该看哪里">
+                                        <CheckBox x:Name="ShowPillSwitch" Style="{StaticResource SwitchStyle}" Click="OnShowPillChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="回答跟着指点走" Description="关掉就固定在屏幕顶部，和指的地方分开看">
+                                        <CheckBox x:Name="BubbleFollowSwitch" Style="{StaticResource SwitchStyle}" Click="OnBubbleFollowChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="显示指点图形" Description="关掉后只念答案，不在屏幕上画光环和框">
+                                        <CheckBox x:Name="ShowCursorSwitch" Style="{StaticResource SwitchStyle}" Click="OnShowCursorChanged" />
+                                    </local:SettingsRowControl>
+
+                                    <TextBlock Text="预览" Style="{StaticResource SectionText}" />
+                                    <local:SettingsRowControl Title="看一遍四种指点图形" Description="光环、区域框、虚线连接、拖拽箭头一次画出来">
+                                        <Button Content="预览" Style="{StaticResource FlatButton}" Click="OnPreviewMarksClick" />
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                                <!-- ============ 数据 ============ -->
+                                <StackPanel x:Name="DataPanel" Visibility="Collapsed">
+                                    <TextBlock Text="留存" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="对话保留天数" Description="超过这个天数的问答会被清掉">
+                                        <ComboBox x:Name="TextRetentionPicker" Style="{StaticResource PickerStyle}" Width="120"
+                                                  SelectionChanged="OnTextRetentionChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="截图保留天数" Description="截图比文字敏感，默认留得更短">
+                                        <ComboBox x:Name="ImageRetentionPicker" Style="{StaticResource PickerStyle}" Width="120"
+                                                  SelectionChanged="OnImageRetentionChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="占用上限" Description="超过上限先淘汰最老的截图，再淘汰最老的对话">
+                                        <ComboBox x:Name="QuotaPicker" Style="{StaticResource PickerStyle}" Width="120"
+                                                  SelectionChanged="OnQuotaChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="当前占用" Description="启动时清理一次，运行期间不再扫盘">
+                                        <TextBlock x:Name="UsageText" Style="{StaticResource RowDescription}" Margin="0" VerticalAlignment="Center" />
+                                    </local:SettingsRowControl>
+
+                                    <TextBlock Text="管理" Style="{StaticResource SectionText}" />
+                                    <local:SettingsRowControl Title="清空全部历史" Description="对话与截图一起删掉，不可撤销">
+                                        <Button Content="清空" Style="{StaticResource FlatButton}" Click="OnClearHistoryClick" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="打开数据目录" Description="数据库和截图都在这儿">
+                                        <Button Content="打开" Style="{StaticResource FlatButton}" Click="OnOpenDataDirectoryClick" />
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                                <!-- ============ 连接 ============ -->
+                                <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed">
+                                    <TextBlock Text="服务端" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="地址" Description="含 /diandian/proxy 前缀；WebSocket 会自动去掉这段前缀">
+                                        <TextBox x:Name="BaseUrlBox" Style="{StaticResource BoxStyle}" Width="300" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="访问令牌" Description="服务器只检查 authorization 头存在，值不重要">
+                                        <TextBox x:Name="TokenBox" Style="{StaticResource BoxStyle}" Width="300" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="跳过证书校验" Description="自建服务端常用自签 CA；正式环境应关掉">
+                                        <CheckBox x:Name="UntrustedTlsSwitch" Style="{StaticResource SwitchStyle}" Click="OnUntrustedTlsChanged" />
+                                    </local:SettingsRowControl>
+                                    <local:SettingsRowControl Title="保存并测试" Description="保存后立刻读一次 /healthz">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock x:Name="ConnectionResultText" Style="{StaticResource RowDescription}"
+                                                       Margin="0,0,10,0" VerticalAlignment="Center" />
+                                            <Button Content="保存" Style="{StaticResource PrimaryButton}" Click="OnSaveConnectionClick" />
+                                        </StackPanel>
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                                <!-- ============ 关于 ============ -->
+                                <StackPanel x:Name="AboutPanel" Visibility="Collapsed">
+                                    <TextBlock Text="版本" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="小柳" Description="常驻屏幕的语音助手，回答跟着指点走">
+                                        <TextBlock x:Name="AboutVersionText" Style="{StaticResource RowDescription}" Margin="0" VerticalAlignment="Center" />
+                                    </local:SettingsRowControl>
+
+                                    <TextBlock Text="它不会做什么" Style="{StaticResource SectionText}" />
+                                    <Border Background="{StaticResource CardBrush}" CornerRadius="8" Padding="16,14"
+                                            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource RowDescription}" Margin="0" TextWrapping="Wrap"
+                                                       Text="· 不会自己抓屏。只有你圈选或选图之后，它才能看到那一块画面。" />
+                                            <TextBlock Style="{StaticResource RowDescription}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                                       Text="· 不会后台偷偷读文件。读文件必须是你本轮明确说过的路径。" />
+                                            <TextBlock Style="{StaticResource RowDescription}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                                       Text="· 不会往你没点头的窗口里填字。抢不到前台就一个字符都不打。" />
+                                            <TextBlock Style="{StaticResource RowDescription}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                                       Text="· 不会把截图留过保留期。文本 90 天、截图 7 天、总量 200MB 上限。" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <TextBlock Text="开源与许可" Style="{StaticResource SectionText}" />
+                                    <local:SettingsRowControl Title="第三方组件" Description="NAudio（音频）、Microsoft.Data.Sqlite（历史库）">
+                                        <Button Content="查看目录" Style="{StaticResource FlatButton}" Click="OnOpenInstallDirectoryClick" />
+                                    </local:SettingsRowControl>
+                                </StackPanel>
+
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

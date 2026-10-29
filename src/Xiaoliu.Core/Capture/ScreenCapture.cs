@@ -125,6 +125,26 @@ public static class ScreenCapture
     }
 
     /// <summary>
+    /// 读用户自己选的一张图（不走抓屏）。仍然压到同一档尺寸与质量，
+    /// 免得一张 4K 原图把整轮请求撑爆。
+    /// </summary>
+    public static CapturedImage FromFile(string path, int maxSide = 1280, long quality = 75L)
+    {
+        using var bitmap = new Bitmap(path);
+        var signature = SignatureOf(bitmap);
+
+        using var scaled = Scale(bitmap, maxSide);
+        using var buffer = new MemoryStream();
+        var codec = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
+        using var parameters = new EncoderParameters(1);
+        parameters.Param[0] = new EncoderParameter(Encoder.Quality, quality);
+        scaled.Save(buffer, codec, parameters);
+
+        return new CapturedImage(buffer.ToArray(), "image/jpeg", scaled.Width, scaled.Height,
+            HashOf(signature), signature);
+    }
+
+    /// <summary>
     /// 内容指纹：缩到 32×32 灰度。用「内容是否变化」替代「抓了多久」，
     /// 是因为定时失效会把「用户盯着不动但还在问」的截图判死（点点 45 秒阈值的老问题）。
     /// </summary>

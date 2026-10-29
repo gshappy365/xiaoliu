@@ -26,6 +26,8 @@ public sealed class TrayHost : IDisposable
     private readonly PillWindow _pill;
     private readonly OverlayWindow _overlay;
     private readonly Companion _companion;
+    private readonly Core.Capture.VisualEvidence _evidence = new();
+    private WorkspaceWindow? _workspace;
 
     public TrayHost(AppSettings settings)
     {
@@ -38,14 +40,14 @@ public sealed class TrayHost : IDisposable
             Text = "小柳（Ctrl+Alt 按住说话）",
             ContextMenuStrip = BuildMenu(),
         };
-        _tray.DoubleClick += (_, _) => ShowHistory();
+        _tray.DoubleClick += (_, _) => ShowWorkspace("home");
 
         _subtitle = new SubtitleWindow();
         _pill = new PillWindow();
-        _pill.Clicked += ShowHistory;
+        _pill.Clicked += () => ShowWorkspace("home");
         _subtitle.StatusChanged += status => _pill.SetStatus(status);
         _overlay = new OverlayWindow();
-        _companion = new Companion(settings, _subtitle, _overlay);
+        _companion = new Companion(settings, _subtitle, _overlay, _evidence);
 
         _hotkeys = new HotkeyHook(settings.PushToTalkModifiers, settings.SelectRegionModifiers, settings.SelectRegionKey);
         _hotkeys.ChordPressed += () => _companion.OnChordPressed();
@@ -57,17 +59,32 @@ public sealed class TrayHost : IDisposable
     public void Start()
     {
         Log.Info("app", $"启动 版本 {typeof(TrayHost).Assembly.GetName().Version}");
-        ApplyLaunchAtLogin(_settings.LaunchAtLogin);
+        LaunchAtLogin.Apply(_settings.LaunchAtLogin);
         SweepOnStartup();
 
         // 托盘菜单之外没有主窗口，所以不能靠「最后一个窗口关闭」来退出。
         Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         // 常驻胶囊：屏幕顶部一直有个「小柳」在那儿，按完热键知道该看哪里。
-        _pill.Show();
+        if (_settings.ShowPill)
+        {
+            _pill.Show();
+        }
+
         _subtitle.ShowTransient("按住 Ctrl+Alt 说话，Ctrl+Alt+S 圈选一块区域给我看。", "小柳");
 
         var args = Environment.GetCommandLineArgs();
+
+        // 开发/截图用：启动后直接开主窗口，省得每次去点托盘。
+        var windowAt = Array.IndexOf(args, "--window");
+        if (windowAt >= 0)
+        {
+            var page = windowAt + 1 < args.Length && !args[windowAt + 1].StartsWith("--", StringComparison.Ordinal)
+                ? args[windowAt + 1]
+                : "home";
+            ShowWorkspace(page);
+        }
+
         var demoAt = Array.IndexOf(args, "--demo");
         if (demoAt >= 0)
         {
@@ -134,16 +151,17 @@ public sealed class TrayHost : IDisposable
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("历史记录", null, (_, _) => ShowHistory());
+        menu.Items.Add("打开小柳", null, (_, _) => ShowWorkspace("home"));
+        menu.Items.Add("历史记录", null, (_, _) => ShowWorkspace("history"));
+        menu.Items.Add("设置", null, (_, _) => ShowWorkspace("settings"));
         menu.Items.Add("圈选一块区域（Ctrl+Alt+S）", null, (_, _) => BeginSelection());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("打开设置文件", null, (_, _) => OpenPath(AppSettings.DefaultPath));
         var autoStart = new ToolStripMenuItem("开机自启") { Checked = _settings.LaunchAtLogin, CheckOnClick = true };
         autoStart.CheckedChanged += (_, _) =>
         {
             _settings.LaunchAtLogin = autoStart.Checked;
             _settings.Save();
-            ApplyLaunchAtLogin(autoStart.Checked);
+            LaunchAtLogin.Apply(autoStart.Checked);
             _subtitle.ShowTransient(autoStart.Checked ? "下次登录会自动启动。" : "已取消开机自启。", "小柳");
         };
         menu.Items.Add(autoStart);
@@ -177,11 +195,34 @@ public sealed class TrayHost : IDisposable
         }
     }
 
-    private void ShowHistory()
+    /// <summary>
+    /// 主工作区只有一个实例：重复打开就切到对应页，不再堆窗口。
+    /// 关闭时只是 Hide（窗口还在，状态不丢），进程退出走托盘菜单。
+    /// </summary>
+    private void ShowWorkspace(string page)
     {
-        var window = new HistoryWindow(_settings);
-        window.Show();
-        window.Activate();
+        try
+        {
+            if (_workspace is null)
+            {
+                _workspace = new WorkspaceWindow(_settings, _companion, _evidence, BeginSelection, () => DrawDemoMarks());
+                _workspace.Closed += (_, _) =>
+                {
+                    // 关掉窗口不等于退出小柳：托盘还在，热键还在。
+                    _workspace = null;
+                };
+            }
+
+            _workspace.ShowPage(page);
+            Log.Info("workspace", $"主界面已打开 {page}，可见={_workspace.IsVisible} 句柄={new System.Windows.Interop.WindowInteropHelper(_workspace).Handle}");
+        }
+        catch (Exception ex)
+        {
+            // 主窗口是 XAML 拼出来的，构造期出错会把整个进程带走 —— 托盘还活着的时候
+            // 用户只看到「程序闪一下就没了」，所以这里必须兜住并留下证据。
+            Log.Error("workspace", ex);
+            System.Windows.MessageBox.Show("主界面打不开：" + ex.Message, "小柳");
+        }
     }
 
     private void BeginSelection()
@@ -220,35 +261,6 @@ public sealed class TrayHost : IDisposable
         catch (Exception ex)
         {
             Log.Error("retention", ex);
-        }
-    }
-
-    private static void ApplyLaunchAtLogin(bool enabled)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
-            if (key is null)
-            {
-                return;
-            }
-
-            if (enabled)
-            {
-                var exe = Environment.ProcessPath;
-                if (!string.IsNullOrEmpty(exe))
-                {
-                    key.SetValue(RunValueName, $"\"{exe}\"");
-                }
-            }
-            else
-            {
-                key.DeleteValue(RunValueName, throwOnMissingValue: false);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error("app", ex);
         }
     }
 
