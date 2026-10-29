@@ -77,6 +77,7 @@ public sealed class ConversationAgent
 
         var requests = 0;
         var calls = 0;
+        var retriedEmptyReply = false;
         var visible = new StringBuilder();
         var finalText = string.Empty;
         var stopReason = "end_turn";
@@ -106,6 +107,15 @@ public sealed class ConversationAgent
 
             if (round.ToolCalls.Count == 0)
             {
+                // 上游偶尔会回一个「没有内容 + end_turn」的空轮（实测 2026-10-29 15:31，
+                // 空转 5 秒后返回空文本），用户只看到「这一轮没有说完，请再说一次」。
+                // 空回复不算答案，原样重发一次；只重试一次，避免把上限耗在空转上。
+                if (string.IsNullOrWhiteSpace(round.Text) && !retriedEmptyReply)
+                {
+                    retriedEmptyReply = true;
+                    continue;
+                }
+
                 finalText = round.Text;
                 stopReason = round.StopReason;
                 break;
