@@ -191,6 +191,17 @@ public sealed class TtsSession : IAsyncDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Task _pump;
 
+    /// <summary>最近一次收到音频帧的时刻（ticks）。用来判断「还在出声」还是「真卡住了」。</summary>
+    private long _lastAudioTicks = DateTimeOffset.UtcNow.UtcTicks;
+
+    /// <summary>
+    /// 多久没有新音频就判超时。不能拿「整轮总时长」当上限：服务端是串行
+    /// 「合成一段 → 实时推流 → 再合成下一段」，40 秒的答案本身就要念 40 秒以上，
+    /// 固定 60 秒会把长回答误判成卡死（10-30 15:32:43 那次就是这么断的，
+    /// 2322 帧 ≈ 46 秒音频 + 一次火山握手超时重试，必然超）。
+    /// </summary>
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
+
     public const int SampleRate = 24000;
 
     public event Action<byte[]>? AudioReceived;
@@ -223,7 +234,33 @@ public sealed class TtsSession : IAsyncDisposable
     public async Task FinishAsync(CancellationToken cancellationToken)
     {
         await SendJsonAsync(new JsonObject { ["type"] = "finish" }, cancellationToken);
-        await _finished.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+
+        // 等 finished 的同时盯着「有没有新音频」：只要还在出声音就一直等，
+        // 超过 StallTimeout 一帧都没有才判卡住。这样长回答不会被误杀，
+        // 真挂住（服务端合成卡死）也能在 30 秒内报错，而不是拖满 60 秒。
+        while (true)
+        {
+            if (_finished.Task.IsCompleted)
+            {
+                return;
+            }
+
+            var idle = TimeSpan.FromTicks(DateTimeOffset.UtcNow.UtcTicks - Volatile.Read(ref _lastAudioTicks));
+            if (idle >= StallTimeout)
+            {
+                throw new TimeoutException(
+                    $"语音合成 {StallTimeout.TotalSeconds:0} 秒没有新音频，判定卡住。");
+            }
+
+            var done = await Task.WhenAny(_finished.Task, Task.Delay(StallTimeout - idle, cancellationToken))
+                .ConfigureAwait(false);
+            if (done == _finished.Task)
+            {
+                return;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
     }
 
     public Task CancelAsync(CancellationToken cancellationToken) =>
@@ -247,6 +284,8 @@ public sealed class TtsSession : IAsyncDisposable
                 {
                     var pcm = new byte[result.Count];
                     Array.Copy(buffer, pcm, result.Count);
+                    // 先记活跃时间再交给播放：FinishAsync 靠它区分「还在出声」和「卡住了」。
+                    Volatile.Write(ref _lastAudioTicks, DateTimeOffset.UtcNow.UtcTicks);
                     AudioReceived?.Invoke(pcm);
                     continue;
                 }
