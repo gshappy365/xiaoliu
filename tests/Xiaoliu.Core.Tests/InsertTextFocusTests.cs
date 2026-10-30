@@ -50,7 +50,7 @@ public sealed class InsertTextFocusTests : IDisposable
         }
     }
 
-    private JsonObject RunInsert(string text = "你好，小柳")
+    private JsonObject RunInsert(string text = "你好，小六")
     {
         var call = new ToolUseCall(
             "toolu_insert",
@@ -89,11 +89,11 @@ public sealed class InsertTextFocusTests : IDisposable
     [Fact]
     public void 前台确认无误才把原文送进去()
     {
-        var payload = Payload(RunInsert("小柳测试 123"));
+        var payload = Payload(RunInsert("小六测试 123"));
 
         Assert.Equal("accepted", payload["status"]!.GetValue<string>());
         Assert.Equal(8, payload["characters"]!.GetValue<int>());
-        Assert.Equal(new[] { "小柳测试 123" }, _writer.Typed);
+        Assert.Equal(new[] { "小六测试 123" }, _writer.Typed);
     }
 
     [Fact]

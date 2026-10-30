@@ -3,19 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Xiaoliu.App"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="小柳" Width="1000" Height="680" MinWidth="860" MinHeight="560"
+        Title="小六" Width="1000" Height="680" MinWidth="860" MinHeight="560"
         WindowStyle="None" Background="{StaticResource CanvasBrush}"
         Foreground="{StaticResource TextBrush}" FontFamily="{StaticResource UiFont}"
         TextOptions.TextFormattingMode="Display"
-        WindowStartupLocation="CenterScreen">
+        Topmost="True" ShowActivated="False" ShowInTaskbar="False"
+        PreviewKeyDown="OnWindowPreviewKeyDown">
 
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="6"
                             CornerRadius="12" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
-    <Border CornerRadius="12" Background="{StaticResource CanvasBrush}"
-            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1">
+    <Border x:Name="Root" CornerRadius="12" Background="{StaticResource CanvasBrush}"
+            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1"
+            RenderTransformOrigin="0.5,0">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="Slide" />
+        </Border.RenderTransform>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="44" />
@@ -23,16 +28,17 @@
             </Grid.RowDefinitions>
 
             <!-- ============================================================ 标题栏 -->
+            <!-- 名字在胶囊上已经有了，这里只写「现在是哪一页」，免得一个界面出现两个「小六」。 -->
             <Grid Grid.Row="0" Margin="16,0,8,0">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
-                    <TextBlock Text="小柳" FontSize="13" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock x:Name="PageTitle" Text="对话" FontSize="13" FontWeight="SemiBold"
+                               Margin="8,0,0,0" VerticalAlignment="Center" />
                     <TextBlock x:Name="CaptionStatus" FontSize="11" Foreground="{StaticResource MutedBrush}"
                                Margin="10,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Button Content="&#xE921;" Style="{StaticResource CaptionButton}" Click="OnMinimizeClick" ToolTip="最小化" />
-                    <Button Content="&#xE8BB;" Style="{StaticResource CaptionButton}" Click="OnCloseClick" ToolTip="关闭" />
+                    <Button Content="&#xE8BB;" Style="{StaticResource CaptionButton}" Click="OnCloseClick" ToolTip="收起（Esc）" />
                 </StackPanel>
             </Grid>
 
@@ -78,7 +84,7 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0">
-                            <TextBlock Text="和小柳说话" Style="{StaticResource TitleText}" />
+                            <TextBlock Text="和小六说话" Style="{StaticResource TitleText}" />
                             <TextBlock x:Name="HomeHint" Style="{StaticResource RowDescription}" Margin="0,6,0,0"
                                        Text="按住 Ctrl+Alt 说话，或者在下面打字。想让我看画面，就先圈选一块区域。" />
                         </StackPanel>
@@ -253,9 +259,9 @@
                                 <!-- ============ 模型 ============ -->
                                 <StackPanel x:Name="ModelPanel" Visibility="Collapsed">
                                     <TextBlock Text="对话模型" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
-                                    <local:SettingsRowControl Title="模型" Description="服务端接受的模型标识，改错会导致整轮失败">
-                                        <TextBox x:Name="ModelPicker" Style="{StaticResource BoxStyle}" Width="240"
-                                                 LostFocus="OnModelCommitted" KeyDown="OnModelKeyDown" />
+                                    <local:SettingsRowControl Title="模型" Description="标「视觉」的能看懂截屏；纯文本模型只能回答文字问题">
+                                        <ComboBox x:Name="ModelPicker" Style="{StaticResource PickerStyle}" Width="280"
+                                                  SelectionChanged="OnModelChanged" />
                                     </local:SettingsRowControl>
                                     <local:SettingsRowControl Title="推理强度" Description="更高强度允许更多分析，等待可能更久。从下一轮生效">
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -274,7 +280,7 @@
                                 <!-- ============ 外观 ============ -->
                                 <StackPanel x:Name="AppearancePanel" Visibility="Collapsed">
                                     <TextBlock Text="常驻与指点" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
-                                    <local:SettingsRowControl Title="显示常驻胶囊" Description="屏幕顶部一直有个「小柳」，按完热键知道该看哪里">
+                                    <local:SettingsRowControl Title="显示常驻胶囊" Description="屏幕顶部一直有个「小六」，按完热键知道该看哪里">
                                         <CheckBox x:Name="ShowPillSwitch" Style="{StaticResource SwitchStyle}" Click="OnShowPillChanged" />
                                     </local:SettingsRowControl>
                                     <local:SettingsRowControl Title="回答跟着指点走" Description="关掉就固定在屏幕顶部，和指的地方分开看">
@@ -342,7 +348,7 @@
                                 <!-- ============ 关于 ============ -->
                                 <StackPanel x:Name="AboutPanel" Visibility="Collapsed">
                                     <TextBlock Text="版本" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
-                                    <local:SettingsRowControl Title="小柳" Description="常驻屏幕的语音助手，回答跟着指点走">
+                                    <local:SettingsRowControl Title="小六" Description="常驻屏幕的语音助手，回答跟着指点走">
                                         <TextBlock x:Name="AboutVersionText" Style="{StaticResource RowDescription}" Margin="0" VerticalAlignment="Center" />
                                     </local:SettingsRowControl>
 

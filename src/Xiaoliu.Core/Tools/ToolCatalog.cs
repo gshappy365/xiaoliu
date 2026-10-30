@@ -172,7 +172,7 @@ public static class ToolCatalog
             "fact", "category"),
 
         Simple(UpdateSetting,
-            "按用户明确要求修改小柳自身设置。只支持本轮声明的设置项；设置项是本地留存与显示开关。",
+            "按用户明确要求修改小六自身设置。只支持本轮声明的设置项；设置项是本地留存与显示开关。",
             new JsonObject
             {
                 ["setting"] = Enum("text_retention_days", "image_retention_days", "max_total_megabytes",
@@ -188,7 +188,7 @@ public static class ToolCatalog
             "query"),
 
         Simple(CaptureScreen,
-            "读取回答所必需的一份视觉证据。小柳只在用户主动圈选时才有截图：模型发起本调用一律被拒绝，"
+            "读取回答所必需的一份视觉证据。小六只在用户主动圈选时才有截图：模型发起本调用一律被拒绝，"
             + "用户圈选的那张图已经随本轮提问一并提供，不需要也无法再次抓屏。收到拒绝后不要重试，"
             + "直接依据已有图片或如实说明看不到屏幕。",
             new JsonObject

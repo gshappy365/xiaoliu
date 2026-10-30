@@ -98,7 +98,7 @@ public sealed class VisualEvidence
     {
         if (_shots.Count == 0)
         {
-            return "本轮没有附带屏幕截图，你看不到他当前的界面。小柳不允许模型自主抓屏："
+            return "本轮没有附带屏幕截图，你看不到他当前的界面。小六不允许模型自主抓屏："
                    + "不要调用 capture_screen，也不要调用指点工具；涉及当前画面的问题请说明看不到，或请用户圈选后重问。";
         }
 

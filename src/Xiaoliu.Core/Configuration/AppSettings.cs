@@ -18,7 +18,11 @@ public sealed class AppSettings
     /// <summary>服务器端自签 CA 未必覆盖 127.0.0.1，v1 允许跳过校验。</summary>
     public bool AllowUntrustedTls { get; set; } = true;
 
-    public string Model { get; set; } = "aliyun.qwen3.8-flash";
+    /// <summary>
+    /// 对话模型。默认取方舟的视觉旗舰 —— 小六的核心是「看屏幕 + 动手」，
+    /// 纯文本模型圈选/截图类提问会直接失效。设置页里可以从清单里换。
+    /// </summary>
+    public string Model { get; set; } = "doubao-seed-2-1-pro-260915";
 
     public int MaxTokensWithTools { get; set; } = 8192;
 

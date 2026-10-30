@@ -8,8 +8,8 @@ namespace Xiaoliu.App;
 /// <summary>
 /// 圈选层：用户拖一个框，松手就取这块区域。
 ///
-/// 这是小柳唯一的「看图」入口 —— 模型不能自己抓屏（ADR 0002），
-/// 所以这个窗口的可用性等于「小柳能不能看屏幕」。
+/// 这是小六唯一的「看图」入口 —— 模型不能自己抓屏（ADR 0002），
+/// 所以这个窗口的可用性等于「小六能不能看屏幕」。
 /// </summary>
 public partial class SelectionWindow : Window
 {

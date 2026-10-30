@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Xiaoliu.Core.Capture;
 using Xiaoliu.Core.Configuration;
 using Xiaoliu.Core.Interop;
@@ -16,7 +18,10 @@ namespace Xiaoliu.App;
 ///
 /// 结构与点点 <c>MainWorkspaceWindow</c> 同构（1000×680、232 宽的导航栏、
 /// 设置是窗口里的一页而不是独立窗口），但不搬它没有对应能力的东西：
-/// 账号、课程库、技能包、积分这几个分类在小柳里是空的，放上去只会是死入口。
+/// 账号、课程库、技能包、积分这几个分类在小六里是空的，放上去只会是死入口。
+///
+/// 它不是独立窗口，而是**从顶部胶囊下面拉出来的一块面板**：鼠标移到胶囊上就展开，
+/// 移开就收回（点点的做法）。从托盘菜单打开时是「钉住」的，不会自己消失。
 /// </summary>
 public partial class WorkspaceWindow : Window
 {
@@ -26,6 +31,21 @@ public partial class WorkspaceWindow : Window
     private readonly Action? _beginSelection;
     private readonly Action? _previewMarks;
 
+    /// <summary>顶部胶囊：面板贴着它下沿展开，鼠标还压在它上面时也不收。</summary>
+    private readonly PillWindow? _pill;
+
+    /// <summary>悬停展开的面板靠轮询光标位置来收起 —— WPF 自己不知道鼠标跑哪去了。</summary>
+    private readonly DispatcherTimer _hoverWatch;
+
+    /// <summary>钉住：从托盘菜单/双击托盘图标打开时不再自动收起。</summary>
+    private bool _pinned = true;
+
+    /// <summary>连续多少次轮询发现鼠标不在面板上。攒够几次再收，避免划过缝隙就没了。</summary>
+    private int _outsideTicks;
+
+    /// <summary>正在播收起动画，别在这时候又 Show 回来。</summary>
+    private bool _hiding;
+
     /// <summary>初始化期间不要触发「改了就保存」，否则会把默认值写回去。</summary>
     private bool _loading = true;
 
@@ -34,19 +54,21 @@ public partial class WorkspaceWindow : Window
         Companion companion,
         VisualEvidence evidence,
         Action? beginSelection = null,
-        Action? previewMarks = null)
+        Action? previewMarks = null,
+        PillWindow? pill = null)
     {
         _settings = settings;
         _companion = companion;
         _evidence = evidence;
         _beginSelection = beginSelection;
         _previewMarks = previewMarks;
+        _pill = pill;
 
         InitializeComponent();
 
         var version = typeof(WorkspaceWindow).Assembly.GetName().Version;
         var versionText = $"v{version?.ToString(3) ?? "0.0.0"}";
-        VersionText.Text = $"小柳 {versionText}";
+        VersionText.Text = $"小六 {versionText}";
         AboutVersionText.Text = versionText;
         EndpointText.Text = _settings.BaseUrl;
 
@@ -59,12 +81,187 @@ public partial class WorkspaceWindow : Window
         Nav.SelectedIndex = 0;
         SettingsNav.SelectedIndex = 0;
 
-        Loaded += (_, _) => AskBox.Focus();
-        Closed += (_, _) => _companion.TurnFinished -= OnTurnFinished;
+        Log.Info("settings", $"模型下拉 {ModelPicker.Items.Count} 项，当前值 {_settings.Model}，"
+                             + $"选中 {(ModelPicker.SelectedItem as ComboBoxItem)?.Content ?? "（无）"}");
+
+        _hoverWatch = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(180),
+        };
+        _hoverWatch.Tick += OnHoverWatch;
+
+        Closed += (_, _) =>
+        {
+            _hoverWatch.Stop();
+            _companion.TurnFinished -= OnTurnFinished;
+        };
+    }
+
+    /// <summary>面板展开/收起时通知外壳，胶囊据此亮/灭。</summary>
+    public event Action<bool>? PanelVisibilityChanged;
+
+    /// <summary>面板是不是钉住的（不会因为鼠标移开而收起）。</summary>
+    public bool IsPinned => _pinned;
+
+    /// <summary>
+    /// 把悬停展开的面板钉住：鼠标可以离开，面板留着。
+    /// 用户悬停展开后想在里面翻历史/改设置，就靠这个 —— 否则鼠标一滑走就没了。
+    /// </summary>
+    public void Pin()
+    {
+        _pinned = true;
+        _outsideTicks = 0;
+        _hoverWatch.Stop();
+
+        Activate();
+        Focus();
+        Dispatcher.InvokeAsync(() => AskBox.Focus(), DispatcherPriority.Loaded);
     }
 
     /// <summary>外部（托盘、胶囊）打开时指定落在哪一页。支持 <c>settings:voice</c> 这种二级定位。</summary>
-    public void ShowPage(string tag)
+    /// <param name="pin">
+    /// true = 钉住，鼠标移开也不收（托盘菜单进来就是这种）；
+    /// false = 悬停态，鼠标一离开就收回（胶囊移上去展开就是这种）。
+    /// </param>
+    public void ShowPage(string tag, bool pin = true)
+    {
+        _pinned = pin;
+        _outsideTicks = 0;
+        _hiding = false;
+
+        SelectPage(tag);
+        PlaceUnderPill();
+
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        PlayReveal();
+        PanelVisibilityChanged?.Invoke(true);
+
+        if (pin)
+        {
+            _hoverWatch.Stop();
+
+            // 钉住打开是用户主动叫出来的，可以抢焦点 —— 他要立刻打字。
+            Activate();
+            Focus();
+
+            // Show() 刚回来时模板还没铺开，AskBox 立刻 Focus() 会落空，等一拍再给。
+            Dispatcher.InvokeAsync(() => AskBox.Focus(), DispatcherPriority.Loaded);
+        }
+        else
+        {
+            // 悬停展开不能抢焦点：用户可能正在别的窗口打字，面板一冒出来就把光标抢走很讨厌。
+            _hoverWatch.Start();
+        }
+    }
+
+    /// <summary>鼠标离开面板且面板没被激活时，淡出收回。</summary>
+    public void HidePanel()
+    {
+        if (!IsVisible || _hiding)
+        {
+            return;
+        }
+
+        _hiding = true;
+        _pinned = false;
+        _hoverWatch.Stop();
+
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+        };
+        fade.Completed += (_, _) =>
+        {
+            if (_hiding)
+            {
+                Hide();
+
+                // 动画会把 Opacity 钉在 0 上。不摘掉的话，下次不走 PlayReveal 的 Show()
+                // （比如「预览指点图形」先藏后显那条路）会显示成一个全透明的窗口。
+                BeginAnimation(OpacityProperty, null);
+                Opacity = 1;
+
+                _hiding = false;
+                PanelVisibilityChanged?.Invoke(false);
+            }
+        };
+
+        BeginAnimation(OpacityProperty, fade);
+    }
+
+    /// <summary>贴着胶囊下沿、水平居中，从上面滑进来。</summary>
+    private void PlaceUnderPill()
+    {
+        var area = SystemParameters.WorkArea;
+
+        // 胶囊底边 = 工作区顶 + 胶囊外边距 + 胶囊高度。拿不到就退回到「顶 + 52」。
+        var top = area.Top + 52;
+        if (_pill is not null)
+        {
+            top = _pill.BottomEdge + 6;
+        }
+
+        Left = area.Left + (area.Width - Width) / 2;
+        Top = top;
+
+        // 屏幕矮的时候别让面板尾巴掉出去。
+        var maxHeight = area.Bottom - top - 12;
+        if (maxHeight > MinHeight && Height > maxHeight)
+        {
+            Height = maxHeight;
+        }
+    }
+
+    private void PlayReveal()
+    {
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(170))
+        {
+            EasingFunction = ease,
+        });
+
+        Slide.BeginAnimation(
+            System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(-12, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+    }
+
+    private void OnHoverWatch(object? sender, EventArgs e)
+    {
+        if (_pinned || !IsVisible || _hiding)
+        {
+            _hoverWatch.Stop();
+            return;
+        }
+
+        // 鼠标还在面板上（含 8px 容差）或者还在胶囊上，都算「没走」。
+        if (WindowInterop.IsCursorOver(this, 8) || _pill?.IsCursorOver == true)
+        {
+            _outsideTicks = 0;
+            return;
+        }
+
+        // 用户点进面板里了（激活状态），说明他在用，不是路过 —— 不收。
+        if (IsActive)
+        {
+            _outsideTicks = 0;
+            return;
+        }
+
+        // 180ms 一轮，攒够 4 轮 ≈ 720ms 才收：鼠标从胶囊滑到面板要穿过 6px 缝隙，
+        // 中途会短暂「哪都不在」，太快收起会闪。
+        if (++_outsideTicks >= 4)
+        {
+            HidePanel();
+        }
+    }
+
+    /// <summary>切到某一页（含 <c>settings:voice</c> 这种二级定位）。</summary>
+    private void SelectPage(string tag)
     {
         var parts = tag.Split(':', 2);
         var page = parts[0];
@@ -89,15 +286,6 @@ public partial class WorkspaceWindow : Window
                 }
             }
         }
-
-        Show();
-
-        // 直接 Activate() 经常抢不过前面那个全屏窗口（前台锁 + 别家 topmost）。
-        // 先把自己顶一下 topmost 再摘掉，是最省事的强制到前方案。
-        Topmost = true;
-        Topmost = false;
-        Activate();
-        Focus();
     }
 
     // ------------------------------------------------------------------ 导航
@@ -113,6 +301,13 @@ public partial class WorkspaceWindow : Window
         HomePage.Visibility = tag == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryPage.Visibility = tag == "history" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
+
+        PageTitle.Text = tag switch
+        {
+            "history" => "历史",
+            "settings" => "设置",
+            _ => "对话",
+        };
 
         if (tag == "history")
         {
@@ -148,7 +343,62 @@ public partial class WorkspaceWindow : Window
 
     // ------------------------------------------------------------------ 填充
 
-    private static ComboBoxItem Item(string text, object tag) => new() { Content = text, Tag = tag };
+    private static ComboBoxItem Item(string text, object tag, string? tip = null) =>
+        new() { Content = text, Tag = tag, ToolTip = tip };
+
+    /// <summary>下拉里的分组标题：不可选，只是把三组分开。</summary>
+    private static ComboBoxItem Header(string text) => new()
+    {
+        Content = text,
+        IsEnabled = false,
+        FontSize = 11,
+        Padding = new Thickness(10, 9, 10, 3),
+
+        // 用 TryFindResource 而不是 FindResource：主题字典挂在窗口上而不是 Application 上，
+        // 查不到会抛异常，把整个 FillModelPicker 打断 —— 表现出来就是下拉里只剩几个协议名。
+        Foreground = Application.Current?.TryFindResource("MutedBrush") as System.Windows.Media.Brush
+                     ?? System.Windows.Media.Brushes.Gray,
+    };
+
+    /// <summary>
+    /// 模型下拉：先放能看图的（截屏理解要靠它），再放纯文本的。
+    /// 清单来自 arkcli 的一次快照，见 <see cref="ModelCatalog"/>。
+    /// </summary>
+    private void FillModelPicker()
+    {
+        ModelPicker.Items.Clear();
+
+        ModelPicker.Items.Add(Header("能看懂截屏"));
+        foreach (var model in ModelCatalog.Vision)
+        {
+            ModelPicker.Items.Add(Item(
+                model.Display, model.Id, $"{model.Id}\n{model.Vendor} · {model.Note}"));
+        }
+
+        ModelPicker.Items.Add(Header("只看文本（圈选/截图类提问会失效）"));
+        foreach (var model in ModelCatalog.TextOnly)
+        {
+            ModelPicker.Items.Add(Item(
+                model.Display, model.Id, $"{model.Id}\n{model.Vendor} · {model.Note}"));
+        }
+    }
+
+    /// <summary>按标识选中；清单里没有就临时插一项，免得下拉框显示空白。</summary>
+    private void SelectModel(string id)
+    {
+        foreach (var item in ModelPicker.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Tag as string, id, StringComparison.OrdinalIgnoreCase))
+            {
+                ModelPicker.SelectedItem = item;
+                return;
+            }
+        }
+
+        var extra = Item($"{id}（当前配置）", id, $"{id}\n清单里没有这个名字，是手输进去的");
+        ModelPicker.Items.Insert(0, extra);
+        ModelPicker.SelectedItem = extra;
+    }
 
     private void FillPickers()
     {
@@ -180,6 +430,8 @@ public partial class WorkspaceWindow : Window
         {
             QuotaPicker.Items.Add(Item($"{value} MB", value));
         }
+
+        FillModelPicker();
 
         RefreshDevices();
     }
@@ -247,7 +499,7 @@ public partial class WorkspaceWindow : Window
         };
         UpdateReasoningText();
 
-        ModelPicker.Text = _settings.Model;
+        SelectModel(_settings.Model);
         VoicePicker.Text = _settings.TtsVoiceId;
 
         BaseUrlBox.Text = _settings.BaseUrl;
@@ -324,7 +576,7 @@ public partial class WorkspaceWindow : Window
                 {
                     Show();
                     Activate();
-                    MessageBox.Show(this, "自检已跑完，结论在日志里（关键词 selftest）。", "小柳");
+                    MessageBox.Show(this, "自检已跑完，结论在日志里（关键词 selftest）。", "小六");
                 });
             }
         });
@@ -463,25 +715,24 @@ public partial class WorkspaceWindow : Window
 
     // ------------------------------------------------------------------ 模型
 
-    private void OnModelCommitted(object sender, RoutedEventArgs e) => ApplyModel();
-
-    private void OnModelKeyDown(object sender, KeyEventArgs e)
+    private void OnModelChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (e.Key == Key.Enter)
+        if (ModelPicker.SelectedItem is ComboBoxItem picked)
         {
-            ApplyModel();
+            ModelPicker.ToolTip = picked.ToolTip;
         }
-    }
 
-    private void ApplyModel()
-    {
-        var value = ModelPicker.Text.Trim();
-        if (_loading || value.Length == 0 || value == _settings.Model)
+        if (_loading || ModelPicker.SelectedItem is not ComboBoxItem item || item.Tag is not string id)
         {
             return;
         }
 
-        _settings.Model = value;
+        if (string.Equals(id, _settings.Model, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _settings.Model = id;
         Save();
         CaptionStatus.Text = "模型已改，下一轮生效";
     }
@@ -625,7 +876,7 @@ public partial class WorkspaceWindow : Window
     private void OnClearHistoryClick(object sender, RoutedEventArgs e)
     {
         var answer = MessageBox.Show(this, "清空本机全部对话历史与截图？这个操作不可撤销。",
-            "小柳", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            "小六", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (answer != MessageBoxResult.OK)
         {
             return;
@@ -642,7 +893,7 @@ public partial class WorkspaceWindow : Window
         catch (Exception ex)
         {
             Log.Error("history", ex);
-            MessageBox.Show(this, "清空失败：" + ex.Message, "小柳");
+            MessageBox.Show(this, "清空失败：" + ex.Message, "小六");
         }
     }
 
@@ -742,7 +993,7 @@ public partial class WorkspaceWindow : Window
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "选择一张图片给小柳看",
+            Title = "选择一张图片给小六看",
             Filter = "图片|*.png;*.jpg;*.jpeg;*.bmp",
         };
 
@@ -761,7 +1012,7 @@ public partial class WorkspaceWindow : Window
         catch (Exception ex)
         {
             Log.Error("capture", ex);
-            MessageBox.Show(this, "读不到这张图：" + ex.Message, "小柳");
+            MessageBox.Show(this, "读不到这张图：" + ex.Message, "小六");
         }
     }
 
@@ -866,7 +1117,22 @@ public partial class WorkspaceWindow : Window
 
     // ------------------------------------------------------------------ 窗口
 
-    private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    /// <summary>Esc 收起面板。挂着问一句的输入框按 Esc 也只是收起，不丢草稿。</summary>
+    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape)
+        {
+            return;
+        }
 
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+        _pinned = false;
+        HidePanel();
+        e.Handled = true;
+    }
+
+    private void OnCloseClick(object sender, RoutedEventArgs e)
+    {
+        _pinned = false;
+        HidePanel();
+    }
 }

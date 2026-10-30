@@ -82,7 +82,7 @@ public sealed class ToolDispatcher
         if (ToolCatalog.RejectedTools.Contains(call.Name))
         {
             return Rejected(call, "tool_not_supported",
-                "小柳不实现这个工具（课程与技能体系已移除），此操作未执行。",
+                "小六不实现这个工具（课程与技能体系已移除），此操作未执行。",
                 recovery: "stop",
                 nextStep: "不要再次请求该工具；用已有信息回答，或如实说明这项能力不在当前客户端。");
         }
@@ -156,8 +156,8 @@ public sealed class ToolDispatcher
         _repeatCounts["capture_screen"] = attempts;
 
         var message = _evidence.IsEmpty
-            ? "小柳没有抓屏能力：这个工具在客户端被策略禁用，重试也不会成功。"
-            : $"小柳没有抓屏能力：这个工具在客户端被策略禁用。本轮已附带用户圈选的 {_evidence.Latest!.CaptureCallId}，直接用它。";
+            ? "小六没有抓屏能力：这个工具在客户端被策略禁用，重试也不会成功。"
+            : $"小六没有抓屏能力：这个工具在客户端被策略禁用。本轮已附带用户圈选的 {_evidence.Latest!.CaptureCallId}，直接用它。";
 
         if (attempts >= 2)
         {
@@ -274,7 +274,7 @@ public sealed class ToolDispatcher
             ["submitted"] = false,
             ["verification"] = "unverified",
             ["message"] = $"已向 {match.ProcessName} 键入 {typed} 个字符，未按回车、未提交。"
-                          + "小柳不自主抓屏，因此无法核对界面；请让用户确认，不要宣布已填写成功。",
+                          + "小六不自主抓屏，因此无法核对界面；请让用户确认，不要宣布已填写成功。",
         });
     }
 
@@ -284,7 +284,7 @@ public sealed class ToolDispatcher
         if (status == "written")
         {
             return Rejected(call, "unverifiable_claim",
-                "小柳不自主抓屏，无法用画面核对填写结果，不接受 written 结论。", "correct_arguments",
+                "小六不自主抓屏，无法用画面核对填写结果，不接受 written 结论。", "correct_arguments",
                 "改用 uncertain，并请用户确认输入框里的内容。");
         }
 

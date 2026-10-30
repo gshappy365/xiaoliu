@@ -65,7 +65,7 @@ public sealed class Companion : IDisposable
                 // 用户不用在「屏幕顶部」和「被指的位置」之间来回看。
                 _subtitle.AnchorBounds = mark.Bounds;
             }),
-            NoticeRequested = text => Ui(() => _subtitle.ShowTransient(text, "小柳")),
+            NoticeRequested = text => Ui(() => _subtitle.ShowTransient(text, "小六")),
             TargetProvider = () => NativeWindows.ListVisibleWindows(),
             Executed = (call, result) =>
             {
@@ -183,7 +183,7 @@ public sealed class Companion : IDisposable
 
             if (!_audio.StartRecording())
             {
-                Ui(() => _subtitle.ShowTransient("麦克风打不开：" + (_audio.LastError ?? "未知原因"), "小柳"));
+                Ui(() => _subtitle.ShowTransient("麦克风打不开：" + (_audio.LastError ?? "未知原因"), "小六"));
                 return;
             }
 
@@ -209,7 +209,7 @@ public sealed class Companion : IDisposable
         {
             Log.Error("asr", ex);
             _audio.StopRecording();
-            Ui(() => _subtitle.ShowTransient("语音识别连不上：" + ex.Message, "小柳"));
+            Ui(() => _subtitle.ShowTransient("语音识别连不上：" + ex.Message, "小六"));
         }
     }
 
@@ -278,7 +278,7 @@ public sealed class Companion : IDisposable
             await DisposeQuietlyAsync(session);
             Log.Info("audio", "采集电平接近静音，未送识别");
             Ui(() => _subtitle.ShowTransient(
-                $"没收到声音（设备：{_audio.LastCaptureDeviceName ?? "未知"}）。检查麦克风，或用 --demo mic 换个设备序号。", "小柳"));
+                $"没收到声音（设备：{_audio.LastCaptureDeviceName ?? "未知"}）。检查麦克风，或用 --demo mic 换个设备序号。", "小六"));
             return;
         }
 
@@ -302,7 +302,7 @@ public sealed class Companion : IDisposable
 
             if (string.IsNullOrWhiteSpace(text))
             {
-                Ui(() => _subtitle.ShowTransient("没听到你说什么，再说一次？", "小柳"));
+                Ui(() => _subtitle.ShowTransient("没听到你说什么，再说一次？", "小六"));
                 return;
             }
 
@@ -313,7 +313,7 @@ public sealed class Companion : IDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Error("asr", ex);
-            Ui(() => _subtitle.ShowTransient("识别失败：" + ex.Message, "小柳"));
+            Ui(() => _subtitle.ShowTransient("识别失败：" + ex.Message, "小六"));
         }
     }
 
@@ -347,7 +347,7 @@ public sealed class Companion : IDisposable
 
             var result = await _agent.RunTurnAsync(question, BuildRuntimeContext(), token);
 
-            Ui(() => _subtitle.ShowText(result.Text, "小柳"));
+            Ui(() => _subtitle.ShowText(result.Text, "小六"));
             if (speak)
             {
                 await FinishSpeechAsync(result.Text, token);
@@ -364,7 +364,7 @@ public sealed class Companion : IDisposable
         catch (Exception ex)
         {
             Log.Error("turn", ex);
-            Ui(() => _subtitle.ShowTransient("这一轮出错了：" + ex.Message, "小柳"));
+            Ui(() => _subtitle.ShowTransient("这一轮出错了：" + ex.Message, "小六"));
         }
         finally
         {
@@ -398,7 +398,7 @@ public sealed class Companion : IDisposable
 
     private void OnTextUpdated(string accumulated)
     {
-        Ui(() => _subtitle.ShowText(accumulated, "小柳"));
+        Ui(() => _subtitle.ShowText(accumulated, "小六"));
         FeedSpeech(accumulated);
     }
 

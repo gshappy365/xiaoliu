@@ -14,7 +14,7 @@ namespace Xiaoliu.App;
 /// 为什么要这个：
 /// 1. <see cref="NativeWindows.TypeText"/> 是唯一「我们生成输入、由别的窗口接收」的路径，
 ///    单测只能测到输入数组拼得对不对，测不到 SendInput 有没有被前台窗口收下。
-/// 2. 更隐蔽的是 <see cref="NativeWindows.Focus"/>。生产场景里小柳在后台，用户当前焦点
+/// 2. 更隐蔽的是 <see cref="NativeWindows.Focus"/>。生产场景里小六在后台，用户当前焦点
 ///    在浏览器或别的程序上，这时 SetForegroundWindow 会被前台锁挡住并静默返回 false。
 ///    所以靶子窗口必须和一个「别的进程」抢前台，否则测了等于没测。
 ///
@@ -22,7 +22,7 @@ namespace Xiaoliu.App;
 /// </summary>
 internal static class TypingSelfCheck
 {
-    private const string Payload = "小柳自检：insert_text 通道正常 0123 ABC";
+    private const string Payload = "小六自检：insert_text 通道正常 0123 ABC";
 
     public static void Run()
     {
@@ -36,7 +36,7 @@ internal static class TypingSelfCheck
 
         var target = new Window
         {
-            Title = "小柳 insert_text 自检（自动关闭）",
+            Title = "小六 insert_text 自检（自动关闭）",
             Content = box,
             Width = 560,
             Height = 180,
@@ -53,7 +53,7 @@ internal static class TypingSelfCheck
         {
             Log.Info("selftest", $"typing 阶段1 靶子窗口激活={target.IsActive}");
 
-            // ② 起一个外部进程（notepad）把前台抢走 —— 这就是生产里「小柳在后台」的处境。
+            // ② 起一个外部进程（notepad）把前台抢走 —— 这就是生产里「小六在后台」的处境。
             try
             {
                 decoy = Process.Start(new ProcessStartInfo("notepad.exe") { UseShellExecute = true });

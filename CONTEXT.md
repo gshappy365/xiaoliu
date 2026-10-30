@@ -1,4 +1,4 @@
-# 小柳客户端（xiaoliu.exe）
+# 小六客户端（xiaoliu.exe）
 
 用自建服务器端替换 botlearn 云端的 Windows 客户端。本文只记录客户端自己的术语，不记录实现。
 

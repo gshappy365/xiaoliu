@@ -159,7 +159,7 @@ public static class NativeWindows
     /// 当前所有可见的顶层窗口，按进程名去重（insert_text 的白名单就从这里来）。
     ///
     /// includeUntitled 默认 false：无标题窗口对「往哪个窗口填字」没有意义。
-    /// 但常驻型浮层（点点的顶部胶囊、小柳自己的胶囊）恰恰没有标题，调试时要看得到。
+    /// 但常驻型浮层（点点的顶部胶囊、小六自己的胶囊）恰恰没有标题，调试时要看得到。
     /// </summary>
     public static IReadOnlyList<TargetWindow> ListVisibleWindows(
         bool includeUntitled = false,

@@ -22,7 +22,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <TextBlock x:Name="StatusText" Foreground="{StaticResource MutedText}" FontSize="11"
-                       Text="小柳" />
+                       Text="小六" />
             <TextBlock x:Name="BodyText" Grid.Row="1" Foreground="#FFF2F4F8" FontSize="14"
                        LineHeight="20" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
                        Margin="0,4,0,0" />

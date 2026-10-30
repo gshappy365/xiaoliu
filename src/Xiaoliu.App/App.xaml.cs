@@ -39,7 +39,7 @@ public partial class App : Application
         _singleInstance = new Mutex(true, @"Global\xiaoliu.exe.single-instance", out var isFirst);
         if (!isFirst)
         {
-            MessageBox.Show("小柳已经在运行了。", "小柳", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("小六已经在运行了。", "小六", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }

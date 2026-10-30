@@ -8,7 +8,7 @@ namespace Xiaoliu.App;
 ///
 /// 数值照点点的 <c>Diandian.Windows.App.DesignSystem.SettingsRow</c>：
 /// MinHeight 52、标题 13、描述 11（不透明度 0.72）、底边 0.5 分隔线。
-/// 点点在宽度不足 420 时会把编辑器换到下一行；小柳主窗口最小宽度就大于这个数，
+/// 点点在宽度不足 420 时会把编辑器换到下一行；小六主窗口最小宽度就大于这个数，
 /// 所以不做那套自适应，少一条分支少一处能出错的地方。
 ///
 /// 继承 ContentControl 而不是 Control：编辑器就是 Content，XAML 里直接写子元素即可。

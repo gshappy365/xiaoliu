@@ -35,7 +35,7 @@ public partial class SubtitleWindow : Window
     /// </summary>
     public CaptureRect? AnchorBounds { get; set; }
 
-    /// <summary>状态行变了（在听 / 在想 / 小柳）。常驻胶囊跟着它显示同一句话。</summary>
+    /// <summary>状态行变了（在听 / 在想 / 小六）。常驻胶囊跟着它显示同一句话。</summary>
     public event Action<string?>? StatusChanged;
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -105,7 +105,7 @@ public partial class SubtitleWindow : Window
         EnsureVisible();
     }
 
-    public void ShowTransient(string text, string status = "小柳")
+    public void ShowTransient(string text, string status = "小六")
     {
         ShowText(text, status);
         _hideTimer.Stop();

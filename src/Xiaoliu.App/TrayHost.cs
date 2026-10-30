@@ -12,7 +12,7 @@ namespace Xiaoliu.App;
 
 /// <summary>
 /// 常驻外壳：托盘图标 + 全局热键 + 三个窗口（字幕条、指点层、圈选层）的生命周期。
-/// 没有主窗口 —— 小柳是常驻助手，不该占一个窗口位置。
+/// 没有主窗口 —— 小六是常驻助手，不该占一个窗口位置。
 /// </summary>
 public sealed class TrayHost : IDisposable
 {
@@ -37,14 +37,15 @@ public sealed class TrayHost : IDisposable
         {
             Icon = SystemIcons.Application,
             Visible = true,
-            Text = "小柳（Ctrl+Alt 按住说话）",
+            Text = "小六（Ctrl+Alt 按住说话）",
             ContextMenuStrip = BuildMenu(),
         };
         _tray.DoubleClick += (_, _) => ShowWorkspace("home");
 
         _subtitle = new SubtitleWindow();
         _pill = new PillWindow();
-        _pill.Clicked += () => ShowWorkspace("home");
+        _pill.Clicked += OnPillClicked;
+        _pill.Hovered += () => ShowWorkspace("home", hover: true);
         _subtitle.StatusChanged += status => _pill.SetStatus(status);
         _overlay = new OverlayWindow();
         _companion = new Companion(settings, _subtitle, _overlay, _evidence);
@@ -65,13 +66,13 @@ public sealed class TrayHost : IDisposable
         // 托盘菜单之外没有主窗口，所以不能靠「最后一个窗口关闭」来退出。
         Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // 常驻胶囊：屏幕顶部一直有个「小柳」在那儿，按完热键知道该看哪里。
+        // 常驻胶囊：屏幕顶部一直有个「小六」在那儿，按完热键知道该看哪里。
         if (_settings.ShowPill)
         {
             _pill.Show();
         }
 
-        _subtitle.ShowTransient("按住 Ctrl+Alt 说话，Ctrl+Alt+S 圈选一块区域给我看。", "小柳");
+        _subtitle.ShowTransient("按住 Ctrl+Alt 说话，Ctrl+Alt+S 圈选一块区域给我看。", "小六");
 
         var args = Environment.GetCommandLineArgs();
 
@@ -94,7 +95,7 @@ public sealed class TrayHost : IDisposable
             if (demoAt + 1 < args.Length && string.Equals(args[demoAt + 1], "ui", StringComparison.OrdinalIgnoreCase))
             {
                 _subtitle.AnchorBounds = point;
-                _subtitle.ShowText("这里是命令面板，点右上角的齿轮可以改主题。", "小柳");
+                _subtitle.ShowText("这里是命令面板，点右上角的齿轮可以改主题。", "小六");
             }
         }
     }
@@ -151,7 +152,7 @@ public sealed class TrayHost : IDisposable
     private ContextMenuStrip BuildMenu()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("打开小柳", null, (_, _) => ShowWorkspace("home"));
+        menu.Items.Add("打开小六", null, (_, _) => ShowWorkspace("home"));
         menu.Items.Add("历史记录", null, (_, _) => ShowWorkspace("history"));
         menu.Items.Add("设置", null, (_, _) => ShowWorkspace("settings"));
         menu.Items.Add("圈选一块区域（Ctrl+Alt+S）", null, (_, _) => BeginSelection());
@@ -162,7 +163,7 @@ public sealed class TrayHost : IDisposable
             _settings.LaunchAtLogin = autoStart.Checked;
             _settings.Save();
             LaunchAtLogin.Apply(autoStart.Checked);
-            _subtitle.ShowTransient(autoStart.Checked ? "下次登录会自动启动。" : "已取消开机自启。", "小柳");
+            _subtitle.ShowTransient(autoStart.Checked ? "下次登录会自动启动。" : "已取消开机自启。", "小六");
         };
         menu.Items.Add(autoStart);
         menu.Items.Add("打开日志目录", null, (_, _) =>
@@ -186,7 +187,7 @@ public sealed class TrayHost : IDisposable
             }
             else
             {
-                System.Windows.MessageBox.Show($"还没有这个文件：{path}", "小柳");
+                System.Windows.MessageBox.Show($"还没有这个文件：{path}", "小六");
             }
         }
         catch (Exception ex)
@@ -197,32 +198,63 @@ public sealed class TrayHost : IDisposable
 
     /// <summary>
     /// 主工作区只有一个实例：重复打开就切到对应页，不再堆窗口。
-    /// 关闭时只是 Hide（窗口还在，状态不丢），进程退出走托盘菜单。
+    /// 收起只是淡出 Hide（窗口还在，状态不丢），进程退出走托盘菜单。
     /// </summary>
-    private void ShowWorkspace(string page)
+    /// <param name="hover">
+    /// true = 鼠标移到胶囊上自动展开的，鼠标一离开就收回；
+    /// false = 用户从托盘菜单/双击图标主动叫出来的，钉住不走。
+    /// </param>
+    private void ShowWorkspace(string page, bool hover = false)
     {
         try
         {
             if (_workspace is null)
             {
-                _workspace = new WorkspaceWindow(_settings, _companion, _evidence, BeginSelection, () => DrawDemoMarks());
+                _workspace = new WorkspaceWindow(
+                    _settings, _companion, _evidence, BeginSelection, () => DrawDemoMarks(), _pill);
+
+                _workspace.PanelVisibilityChanged += visible => _pill.SetExpanded(visible);
                 _workspace.Closed += (_, _) =>
                 {
-                    // 关掉窗口不等于退出小柳：托盘还在，热键还在。
+                    // 关掉窗口不等于退出小六：托盘还在，热键还在。
                     _workspace = null;
+                    _pill.SetExpanded(false);
                 };
             }
 
-            _workspace.ShowPage(page);
-            Log.Info("workspace", $"主界面已打开 {page}，可见={_workspace.IsVisible} 句柄={new System.Windows.Interop.WindowInteropHelper(_workspace).Handle}");
+            _workspace.ShowPage(page, pin: !hover);
+            Log.Info("workspace", $"主界面已打开 {page}，悬停={hover} 可见={_workspace.IsVisible} 句柄={new System.Windows.Interop.WindowInteropHelper(_workspace).Handle}");
         }
         catch (Exception ex)
         {
             // 主窗口是 XAML 拼出来的，构造期出错会把整个进程带走 —— 托盘还活着的时候
             // 用户只看到「程序闪一下就没了」，所以这里必须兜住并留下证据。
             Log.Error("workspace", ex);
-            System.Windows.MessageBox.Show("主界面打不开：" + ex.Message, "小柳");
+            System.Windows.MessageBox.Show("主界面打不开：" + ex.Message, "小六");
         }
+    }
+
+    /// <summary>
+    /// 点胶囊：悬停展开的面板点一下就钉住（鼠标可以走了），已钉住的再点一下收起。
+    /// 面板没开时是「打开并钉住」。
+    /// </summary>
+    private void OnPillClicked()
+    {
+        if (_workspace is { IsVisible: true } panel)
+        {
+            if (panel.IsPinned)
+            {
+                panel.HidePanel();
+            }
+            else
+            {
+                panel.Pin();
+            }
+
+            return;
+        }
+
+        ShowWorkspace("home");
     }
 
     private void BeginSelection()
@@ -236,15 +268,15 @@ public sealed class TrayHost : IDisposable
                 var shot = _companion.AddSelection(rect, image);
                 _subtitle.ShowTransient(
                     $"已圈选 {rect.Width}×{rect.Height}（{shot.CaptureCallId}）。按住 Ctrl+Alt 说你的问题。",
-                    "小柳");
+                    "小六");
             }
             catch (Exception ex)
             {
                 Log.Error("capture", ex);
-                _subtitle.ShowTransient("取图失败：" + ex.Message, "小柳");
+                _subtitle.ShowTransient("取图失败：" + ex.Message, "小六");
             }
         };
-        selection.Cancelled += () => _subtitle.ShowTransient("已取消圈选。", "小柳");
+        selection.Cancelled += () => _subtitle.ShowTransient("已取消圈选。", "小六");
         selection.Begin();
     }
 
