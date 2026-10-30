@@ -14,8 +14,9 @@ namespace Xiaoliu.Core.Tools;
 /// 工具执行 + 策略。策略全部在客户端，服务器端一行不改（交接文档的硬约束）。
 ///
 /// 三条策略在这里落地：
-/// 1. 自主抓屏禁止 —— capture_screen 一律拒绝，原因码 capture_not_user_initiated；
-/// 2. 指点必须引用用户圈选的那张图，且那张图对应屏幕内容没变（hash 判定）；
+/// 1. 抓屏按 <see cref="AppSettings.AllowAutonomousCapture"/> 放行或拒绝（ADR 0010）；
+///    关掉时原因码 capture_not_user_initiated，回到 ADR 0002 的旧立场；
+/// 2. 指点必须引用一张可用的图（用户圈选的，或本轮自己抓的），且那张图对应屏幕内容没变（hash 判定）；
 /// 3. 课程三件套与技能两件套不实现，收到即 rejected。
 /// </summary>
 public sealed class ToolDispatcher
@@ -27,6 +28,7 @@ public sealed class ToolDispatcher
     private readonly VisualEvidence _evidence;
     private readonly HistoryStore _history;
     private readonly IWindowWriter _writer;
+    private readonly Func<(CaptureRect Bounds, CapturedImage Image)> _grabScreen;
 
     private int _factsThisTurn;
     private int _insertionSequence;
@@ -35,12 +37,23 @@ public sealed class ToolDispatcher
     /// <summary>一旦置位，本轮所有后续工具调用都直接返回这条失败，不再执行。</summary>
     private string? _terminalFailure;
 
-    public ToolDispatcher(AppSettings settings, VisualEvidence evidence, HistoryStore history, IWindowWriter? writer = null)
+    public ToolDispatcher(
+        AppSettings settings,
+        VisualEvidence evidence,
+        HistoryStore history,
+        IWindowWriter? writer = null,
+        Func<(CaptureRect Bounds, CapturedImage Image)>? grabScreen = null)
     {
         _settings = settings;
         _evidence = evidence;
         _history = history;
         _writer = writer ?? NativeWindowWriter.Instance;
+        // 真抓屏要 GDI，测试里换成桩，否则「允许抓屏」这条路根本没法断言。
+        _grabScreen = grabScreen ?? (() =>
+        {
+            var bounds = ScreenCapture.VirtualScreenBounds();
+            return (bounds, ScreenCapture.Capture(bounds));
+        });
     }
 
     /// <summary>指点图形要画出来了。</summary>
@@ -109,7 +122,9 @@ public sealed class ToolDispatcher
         {
             return call.Name switch
             {
-                ToolCatalog.CaptureScreen => RejectCapture(call),
+                ToolCatalog.CaptureScreen => _settings.AllowAutonomousCapture
+                    ? CaptureScreen(call)
+                    : RejectCapture(call),
                 ToolCatalog.PointAtScreen or ToolCatalog.HighlightRegion
                     or ToolCatalog.ConnectRegions or ToolCatalog.DemonstrateDrag => ExecuteGuidance(call, args),
                 ToolCatalog.InsertText => ExecuteInsertText(call, args),
@@ -140,10 +155,83 @@ public sealed class ToolDispatcher
         }
     }
 
+    // ---------------------------------------------------------------- 抓屏
+
+    /// <summary>
+    /// 模型自己抓一张当前屏幕（ADR 0010）。
+    ///
+    /// 图不能只放在回执文字里 —— 它必须真的回到模型眼前，所以 tool_result 的 content
+    /// 用数组形式：一个 text（结构化回执，给模型引用坐标用）+ 一个 image（原图）。
+    /// 纯文本上游那边，服务端会把这张图转成 VL 描述/OCR 文字再发，链路不用改。
+    ///
+    /// 一轮最多抓两次：屏幕变了再抓一次是合理的，再多就是在原地打转，
+    /// 每次都是一整个上游往返，用户等不起。
+    /// </summary>
+    private JsonObject CaptureScreen(ToolUseCall call)
+    {
+        _repeatCounts.TryGetValue("capture_screen", out var attempts);
+        attempts++;
+        _repeatCounts["capture_screen"] = attempts;
+
+        if (attempts > 2)
+        {
+            _terminalFailure = "本轮抓屏次数已用完，不再抓新的。";
+            return Rejected(call, "capture_budget_exhausted",
+                "本轮已经抓过两次屏幕，不再抓第三次。", "stop",
+                "用手上已有的截图回答；确实看不到就说看不到，不要再请求抓屏。");
+        }
+
+        CaptureRect bounds;
+        CapturedImage image;
+        try
+        {
+            (bounds, image) = _grabScreen();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Rejected(call, "capture_failed", $"抓屏失败：{ex.Message}", "stop",
+                "如实说明抓不到屏幕，请用户圈选一块区域。");
+        }
+
+        var shot = _evidence.Add(bounds, image, prefix: "capture");
+        var payload = new JsonObject
+        {
+            ["status"] = "accepted",
+            ["capture_call_id"] = shot.CaptureCallId,
+            ["screen_number"] = shot.ScreenNumber,
+            ["width"] = image.Width,
+            ["height"] = image.Height,
+            ["message"] = $"已抓取当前屏幕 {image.Width}x{image.Height}，图就在这条回执里。",
+            ["next_step"] = $"指点工具引用 capture_call_id={shot.CaptureCallId}、screen_number={shot.ScreenNumber}，"
+                            + "坐标按 0-1000 归一化。",
+        };
+
+        return new JsonObject
+        {
+            ["type"] = "tool_result",
+            ["tool_use_id"] = call.Id,
+            ["is_error"] = false,
+            ["content"] = new JsonArray
+            {
+                new JsonObject { ["type"] = "text", ["text"] = payload.ToJsonString() },
+                new JsonObject
+                {
+                    ["type"] = "image",
+                    ["source"] = new JsonObject
+                    {
+                        ["type"] = "base64",
+                        ["media_type"] = image.MediaType,
+                        ["data"] = Convert.ToBase64String(image.Bytes),
+                    },
+                },
+            },
+        };
+    }
+
     // ---------------------------------------------------------------- 抓屏策略
 
     /// <summary>
-    /// 自主抓屏一律拒绝。这不是「暂时没实现」——是产品立场（ADR 0002）。
+    /// 关闭「允许模型主动抓屏」时的拒绝路径（ADR 0002 的旧立场，现在是个开关）。
     /// 有圈选图时额外说明「图已经在手」，否则模型会以为抓屏失败要重试。
     ///
     /// 第二次起直接终止本轮工具恢复：实测模型会把「被拒」当成「临时故障」反复重试，
@@ -156,8 +244,8 @@ public sealed class ToolDispatcher
         _repeatCounts["capture_screen"] = attempts;
 
         var message = _evidence.IsEmpty
-            ? "小六没有抓屏能力：这个工具在客户端被策略禁用，重试也不会成功。"
-            : $"小六没有抓屏能力：这个工具在客户端被策略禁用。本轮已附带用户圈选的 {_evidence.Latest!.CaptureCallId}，直接用它。";
+            ? "用户关掉了「允许主动看屏幕」，抓屏被策略禁用，重试也不会成功。"
+            : $"用户关掉了「允许主动看屏幕」，抓屏被策略禁用。本轮已附带用户圈选的 {_evidence.Latest!.CaptureCallId}，直接用它。";
 
         if (attempts >= 2)
         {
@@ -505,7 +593,9 @@ public sealed class ToolDispatcher
             return true;
         }
 
-        var content = result["content"]?.GetValue<string>();
+        // content 可能是字符串，也可能是块数组（抓屏会把原图一起塞进回执），
+        // 这里只关心字符串那种。
+        var content = result["content"] is JsonValue value ? value.GetValue<string>() : null;
         if (string.IsNullOrEmpty(content))
         {
             return false;
@@ -525,7 +615,8 @@ public sealed class ToolDispatcher
     /// <summary>策略拒绝时给用户的一句人话，免得模型在无话可说时反复道歉。</summary>
     public static string FallbackMessage(JsonObject result)
     {
-        var content = result["content"]?.GetValue<string>();
+        // 同上：块数组形式的回执不是拒绝，取不到字符串就当没有 error_code。
+        var content = result["content"] is JsonValue value ? value.GetValue<string>() : null;
         var code = string.Empty;
         try
         {
@@ -574,7 +665,7 @@ public sealed class ToolDispatcher
 
         if (includeCaptureContext && !_evidence.IsEmpty)
         {
-            payload["capture_context"] = _evidence.DescribeForModel();
+            payload["capture_context"] = _evidence.DescribeForModel(_settings.AllowAutonomousCapture);
         }
 
         return new JsonObject

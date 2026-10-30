@@ -216,6 +216,13 @@
                                                   SelectionChanged="OnHoldChanged" />
                                     </local:SettingsRowControl>
 
+                                    <TextBlock Text="画面" Style="{StaticResource SectionText}" />
+                                    <local:SettingsRowControl Title="允许我主动看屏幕"
+                                                             Description="打开后你问「看得到吗」它会自己抓一张；关掉就只能由你圈选给它看。下一轮生效">
+                                        <CheckBox x:Name="AutonomousCaptureSwitch" Style="{StaticResource SwitchStyle}"
+                                                  Click="OnAutonomousCaptureChanged" />
+                                    </local:SettingsRowControl>
+
                                     <TextBlock Text="诊断" Style="{StaticResource SectionText}" />
                                     <local:SettingsRowControl Title="打字自检" Description="验证 insert_text 能否从别的窗口抢回前台并把字打进去">
                                         <Button Content="运行" Style="{StaticResource FlatButton}" Click="OnTypingSelfCheckClick" />

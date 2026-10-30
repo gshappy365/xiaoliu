@@ -90,7 +90,7 @@ public sealed class ConversationAgent
             var request = new ChatRequest
             {
                 Model = _settings.Model,
-                System = SystemPrompt.Base,
+                System = SystemPrompt.For(_settings.AllowAutonomousCapture),
                 Messages = (JsonArray)messages.DeepClone(),
                 Tools = allowTools ? ToolCatalog.All : null,
                 MaxTokens = allowTools ? _settings.MaxTokensWithTools : _settings.MaxTokensWithoutTools,
@@ -252,7 +252,7 @@ public sealed class ConversationAgent
 
     private JsonObject? BuildRuntimeContext(IReadOnlyDictionary<string, string>? extra)
     {
-        var parts = new List<string> { "【画面来源与能力】\n" + _evidence.DescribeForModel() };
+        var parts = new List<string> { "【画面来源与能力】\n" + _evidence.DescribeForModel(_settings.AllowAutonomousCapture) };
         if (extra is not null)
         {
             parts.AddRange(extra.Select(pair => $"【{pair.Key}】\n{pair.Value}"));

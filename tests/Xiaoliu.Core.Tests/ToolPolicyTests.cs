@@ -26,7 +26,12 @@ public sealed class ToolPolicyTests : IDisposable
         _history = new HistoryStore(_dbPath);
         // 桩：截图永远「内容没变」，测试不碰真实屏幕。
         _evidence = new VisualEvidence((_, _) => true);
-        _dispatcher = new ToolDispatcher(_settings, _evidence, _history)
+        _dispatcher = new ToolDispatcher(_settings, _evidence, _history, grabScreen: () =>
+        {
+            // 桩：不碰真实屏幕，给一张固定图。字节内容用来断言「原图真的回了模型」。
+            var image = new CapturedImage(new byte[] { 9, 9, 9 }, "image/jpeg", 1920, 1080, "hash-grab", new byte[1024]);
+            return (new CaptureRect(0, 0, 1920, 1080), image);
+        })
         {
             GuidanceRequested = mark => _marks.Add(mark),
             NoticeRequested = _ => { },
@@ -59,8 +64,11 @@ public sealed class ToolPolicyTests : IDisposable
     }
 
     [Fact]
-    public void AutonomousCaptureIsRejectedWithPolicyCode()
+    public void AutonomousCaptureIsRejectedWhenTheUserTurnsItOff()
     {
+        // ADR 0010：默认放行，关掉这个开关才回到 ADR 0002 的旧立场。
+        _settings.AllowAutonomousCapture = false;
+
         var result = _dispatcher.Execute(Call("capture_screen", new { source = "current", purpose = "visible_content" }), default);
 
         Assert.True(result["is_error"]!.GetValue<bool>());
@@ -71,8 +79,46 @@ public sealed class ToolPolicyTests : IDisposable
     }
 
     [Fact]
+    public void AutonomousCaptureReturnsTheRealImageToTheModel()
+    {
+        // 放行时不能只回一句「抓到了」—— 图必须真的回到模型眼前，
+        // 否则模型只能凭一句回执编造画面内容。
+        var result = _dispatcher.Execute(Call("capture_screen", new { source = "current", purpose = "visible_content" }), default);
+
+        Assert.False(result["is_error"]!.GetValue<bool>());
+        var blocks = result["content"]!.AsArray();
+        Assert.Equal(2, blocks.Count);
+
+        var payload = JsonNode.Parse(blocks[0]!["text"]!.GetValue<string>())!.AsObject();
+        Assert.Equal("accepted", payload["status"]!.GetValue<string>());
+        Assert.Equal("capture-1", payload["capture_call_id"]!.GetValue<string>());
+
+        var image = blocks[1]!.AsObject();
+        Assert.Equal("image", image["type"]!.GetValue<string>());
+        Assert.Equal("image/jpeg", image["source"]!["media_type"]!.GetValue<string>());
+        Assert.Equal(Convert.ToBase64String(new byte[] { 9, 9, 9 }), image["source"]!["data"]!.GetValue<string>());
+
+        // 抓到的图要进本轮证据，后面指点工具才能引用它。
+        Assert.Single(_evidence.Shots);
+        Assert.Equal("capture-1", _evidence.Latest!.CaptureCallId);
+    }
+
+    [Fact]
+    public void CaptureStopsAfterTwoGrabsInOneTurn()
+    {
+        // 屏幕变了再抓一次是合理的，第三次就是在打转：每次都是一整个上游往返。
+        _dispatcher.Execute(Call("capture_screen", new { source = "current", purpose = "visible_content" }), default);
+        _dispatcher.Execute(Call("capture_screen", new { source = "current", purpose = "visible_content" }), default);
+        var third = _dispatcher.Execute(Call("capture_screen", new { source = "current", purpose = "visible_content" }), default);
+
+        Assert.True(third["is_error"]!.GetValue<bool>());
+        Assert.Equal("capture_budget_exhausted", Payload(third)["error_code"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void CaptureRejectionPointsAtTheUserSelectionWhenPresent()
     {
+        _settings.AllowAutonomousCapture = false;
         var shot = AddShot();
         var result = _dispatcher.Execute(Call("capture_screen", new { source = "current", purpose = "visible_content" }), default);
 

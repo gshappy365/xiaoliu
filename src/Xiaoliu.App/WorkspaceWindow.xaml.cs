@@ -476,6 +476,7 @@ public partial class WorkspaceWindow : Window
     private void ApplySettingsToControls()
     {
         LaunchAtLoginSwitch.IsChecked = _settings.LaunchAtLogin;
+        AutonomousCaptureSwitch.IsChecked = _settings.AllowAutonomousCapture;
         PushToTalkBox.Text = _settings.PushToTalkModifiers.Replace(",", " + ");
         SelectRegionBox.Text = $"{_settings.SelectRegionModifiers.Replace(",", " + ")} + {_settings.SelectRegionKey}";
 
@@ -535,6 +536,20 @@ public partial class WorkspaceWindow : Window
     }
 
     // ------------------------------------------------------------------ 通用
+
+    private void OnAutonomousCaptureChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _settings.AllowAutonomousCapture = AutonomousCaptureSwitch.IsChecked == true;
+        Save();
+        CaptionStatus.Text = _settings.AllowAutonomousCapture
+            ? "已允许主动看屏幕，下一轮生效"
+            : "已关掉主动看屏幕，只能用圈选";
+    }
 
     private void OnLaunchAtLoginChanged(object sender, RoutedEventArgs e)
     {

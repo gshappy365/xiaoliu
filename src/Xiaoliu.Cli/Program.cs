@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json.Nodes;
 using Xiaoliu.Core.Agent;
 using Xiaoliu.Core.Capture;
 using Xiaoliu.Core.Configuration;
@@ -143,7 +144,16 @@ internal static class Program
             Executed = (call, result) =>
             {
                 var isError = result["is_error"]?.GetValue<bool>() ?? false;
-                var content = result["content"]?.GetValue<string>() ?? "";
+                // 抓屏的回执是块数组（文字 + 原图），其余工具是字符串。
+                var content = result["content"] switch
+                {
+                    JsonValue value => value.GetValue<string>(),
+                    JsonArray blocks => string.Join(" ", blocks.Select(b =>
+                        b?["type"]?.GetValue<string>() == "image"
+                            ? $"[图 {b?["source"]?["media_type"]?.GetValue<string>()} {b?["source"]?["data"]?.GetValue<string>().Length ?? 0} 字符 base64]"
+                            : b?["text"]?.GetValue<string>() ?? "")),
+                    _ => "",
+                };
                 var shown = content.Length > 220 ? content[..220] + "…" : content;
                 Console.WriteLine($"  ↳ {call.Name} {(isError ? "REJECTED" : "ok")} {shown}");
             },

@@ -55,6 +55,15 @@ public sealed class AppSettings
     /// <summary>回答气泡跟着指点目标浮动（ADR 0005）。关掉就固定贴在胶囊下方。</summary>
     public bool BubbleFollowsTarget { get; set; } = true;
 
+    /// <summary>
+    /// 允许模型自己调 <c>capture_screen</c> 抓当前屏幕（ADR 0010，推翻 ADR 0002 的禁令）。
+    ///
+    /// 默认开：用户问「你能看到我屏幕吗」时，让它自己抓一张比反问「你圈选一下」有用得多。
+    /// 关掉就回到旧行为 —— capture_screen 一律拒绝（原因码 capture_not_user_initiated），
+    /// 画面只能由用户圈选提供。
+    /// </summary>
+    public bool AllowAutonomousCapture { get; set; } = true;
+
     /// <summary>字幕条是否显示 ASR 中间结果。</summary>
     public bool ShowAsrPartial { get; set; } = true;
 

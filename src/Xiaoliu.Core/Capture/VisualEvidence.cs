@@ -1,7 +1,8 @@
 namespace Xiaoliu.Core.Capture;
 
 /// <summary>
-/// 本轮可用的视觉证据：只来自用户圈选，模型无法自己加。
+/// 本轮可用的视觉证据：用户圈选的图，以及（<c>AllowAutonomousCapture</c> 打开时）
+/// 模型自己抓的图（ADR 0010）。
 ///
 /// 有效性不看时间看内容（docs/adr/0003）：截图之后只要那块屏幕没变，就一直可用；
 /// 变了就判 stale_capture，让模型知道「你手上那张图已经过时」。
@@ -30,10 +31,14 @@ public sealed class VisualEvidence
     /// <summary>最近一次圈选，指点工具默认引用它。</summary>
     public Shot? Latest => _shots.Count == 0 ? null : _shots[^1];
 
-    /// <summary>登记一张用户圈选图，返回它在工具回执里使用的引用号。</summary>
-    public Shot Add(CaptureRect rect, CapturedImage image)
+    /// <summary>
+    /// 登记一张图，返回它在工具回执里使用的引用号。
+    /// <paramref name="prefix"/> 区分来源：用户圈选是 <c>selection</c>，模型自己抓的是 <c>capture</c>
+    /// —— 回执里这两个前缀会让模型知道「这张是谁弄来的」。
+    /// </summary>
+    public Shot Add(CaptureRect rect, CapturedImage image, string prefix = "selection")
     {
-        var shot = new Shot($"selection-{++_sequence}", 1, rect, image, DateTimeOffset.UtcNow);
+        var shot = new Shot($"{prefix}-{++_sequence}", 1, rect, image, DateTimeOffset.UtcNow);
         _shots.Add(shot);
         return shot;
     }
@@ -94,10 +99,20 @@ public sealed class VisualEvidence
     }
 
     /// <summary>给模型看的画面来源说明，直接进 RuntimeContext。</summary>
-    public string DescribeForModel()
+    /// <param name="allowAutonomousCapture">
+    /// 打开时告诉模型「你可以自己抓一张」（ADR 0010）。默认 false 保留旧措辞，
+    /// 老调用点不改也不会突然多出一句「你能抓屏」。
+    /// </param>
+    public string DescribeForModel(bool allowAutonomousCapture = false)
     {
         if (_shots.Count == 0)
         {
+            if (allowAutonomousCapture)
+            {
+                return "本轮还没有附带屏幕截图，但你可以调用 capture_screen 自己抓一张当前屏幕。"
+                       + "涉及当前画面的问题，先抓屏再回答，不要凭空猜测，也不要反问用户屏幕上是什么。";
+            }
+
             return "本轮没有附带屏幕截图，你看不到他当前的界面。小六不允许模型自主抓屏："
                    + "不要调用 capture_screen，也不要调用指点工具；涉及当前画面的问题请说明看不到，或请用户圈选后重问。";
         }
@@ -105,7 +120,10 @@ public sealed class VisualEvidence
         var lines = _shots.Select(s =>
             $"{s.CaptureCallId}，screen_number={s.ScreenNumber}，{s.Image.Width}x{s.Image.Height} 像素，"
             + $"覆盖屏幕区域 ({s.Rect.X},{s.Rect.Y}) {s.Rect.Width}x{s.Rect.Height}");
-        return "本轮附带的截图来自用户主动圈选，不是模型抓取。可用引用："
+        var source = allowAutonomousCapture
+            ? "本轮附带的截图来自用户圈选或你自己抓取（capture- 前缀是自己抓的，selection- 是用户圈选）。可用引用："
+            : "本轮附带的截图来自用户主动圈选，不是模型抓取。可用引用：";
+        return source
                + string.Join("；", lines)
                + "。指点工具必须引用这些 capture_call_id 与 screen_number，坐标按 0-1000 归一化。";
     }
