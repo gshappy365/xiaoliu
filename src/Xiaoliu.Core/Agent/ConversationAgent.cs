@@ -95,6 +95,9 @@ public sealed class ConversationAgent
                 Tools = allowTools ? ToolCatalog.All : null,
                 MaxTokens = allowTools ? _settings.MaxTokensWithTools : _settings.MaxTokensWithoutTools,
                 ReasoningEffort = _settings.ReasoningEffort,
+                // 视觉组模型自己会看图，让服务端把图片原样透传（省一次 3.4s 的 VL 描述）。
+                // 纯文本模型仍然要服务端先转成文字，否则它拿到的是自己看不见的图片块。
+                VisionCapable = ModelCatalog.Find(_settings.Model)?.Vision ?? false,
             };
 
             requests++;

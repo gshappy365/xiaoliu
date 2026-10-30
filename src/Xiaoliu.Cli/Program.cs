@@ -56,7 +56,9 @@ internal static class Program
             xiaoliu-cli —— 线协议联调台
 
               health                          读 /healthz 与 /capabilities
-              chat "问题" [--tools] [--image 路径]   走一轮对话（--image 模拟用户圈选）
+              chat "问题" [--tools] [--image 路径] [--model id]
+                                              走一轮对话（--image 模拟用户圈选，
+                                              --model 只在内存里换模型，不写回配置）
               asr 文件.wav                    把 16k/16bit 单声道 wav 送进 ASR 中继
               tts "文字" [--out 文件.wav]      合成并落盘
               tools                           打印本轮声明的 14 个工具
@@ -99,7 +101,16 @@ internal static class Program
         var useTools = args.Contains("--tools");
         var imagePath = TakeOption(args, "--image");
         var liveCapture = args.Contains("--capture");
-        var question = string.Join(" ", args.Where(a => !a.StartsWith("--", StringComparison.Ordinal) && a != imagePath));
+        // 只在内存里换模型：验证「视觉组直连 / 纯文本转文字」两条路时，
+        // 不用去改 settings.json（改磁盘配置忘了还原是踩过的坑）。
+        var modelOverride = TakeOption(args, "--model");
+        if (!string.IsNullOrWhiteSpace(modelOverride))
+        {
+            settings.Model = modelOverride;
+            Console.WriteLine($"[模型] 本轮临时用 {modelOverride}（未写回配置）");
+        }
+        var question = string.Join(" ", args.Where(a =>
+            !a.StartsWith("--", StringComparison.Ordinal) && a != imagePath && a != modelOverride));
 
         using var history = new HistoryStore(settings.DatabasePath);
 

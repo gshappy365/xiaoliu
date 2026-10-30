@@ -107,6 +107,14 @@ public sealed class ChatClient : IDisposable
             body["main_reasoning_effort"] = request.ReasoningEffort;
         }
 
+        // 只在「当前模型自己能看图」时发。服务端据此把图片块原样透传，
+        // 不再跑 VL 描述 / OCR —— 那是给纯文本上游准备的前处理。
+        // 不发的效果和不支持视觉一样（照旧转文本），所以点点那条链路不受影响。
+        if (request.VisionCapable)
+        {
+            body["vision_capable"] = true;
+        }
+
         if (request.Tools is { Count: > 0 })
         {
             var tools = new JsonArray();
@@ -137,6 +145,12 @@ public sealed class ChatRequest
     public IReadOnlyList<ToolDefinition>? Tools { get; init; }
     public int MaxTokens { get; init; } = 8192;
     public string? ReasoningEffort { get; init; }
+
+    /// <summary>
+    /// 当前对话模型自己能看图（<see cref="ModelCatalog"/> 里的 Vision 组）。
+    /// 为 true 时服务端直连透传图片；为 false 时服务端先转成文字再发。
+    /// </summary>
+    public bool VisionCapable { get; init; }
 }
 
 public sealed class ChatHttpException(HttpStatusCode status, string body)
