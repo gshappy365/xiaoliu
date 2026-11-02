@@ -108,6 +108,12 @@ public sealed class Companion : IDisposable
     public Task AskTextAsync(string question) =>
         RunTurnAsync(question, _turn?.Token ?? CancellationToken.None, speak: false);
 
+    /// <summary>
+    /// 设置页换了录音设备：直接改到正在用的采集器上，下一轮就生效。
+    /// 只在启动时读一次的话，用户选完设备按热键还是老设备，看起来像「选了没用」。
+    /// </summary>
+    public void ApplyCaptureDevice(int number) => _audio.CaptureDeviceNumber = number;
+
     // ---------------------------------------------------------------- 热键
 
     public void OnChordPressed()

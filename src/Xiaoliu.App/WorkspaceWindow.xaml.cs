@@ -636,6 +636,8 @@ public partial class WorkspaceWindow : Window
 
         _settings.CaptureDeviceNumber = index;
         Save();
+        // 光存配置不够：采集器是启动时按旧值建好的，不推过去就得重启才生效。
+        _companion.ApplyCaptureDevice(index);
         CaptionStatus.Text = index < 0 ? "麦克风跟随系统默认" : $"麦克风已指定设备 {index}";
     }
 
