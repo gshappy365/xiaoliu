@@ -1,52 +1,30 @@
 namespace Xiaoliu.Core.Protocol;
 
 /// <summary>
-/// 线协议常量。路径与点点 <c>ProxyServiceEndpoint</c> 逐字一致（见 reference/Core/…/ProxyServiceEndpoint.cs），
-/// 只有基地址由配置给出，所以不需要 hosts 劫持。改这里等于改协议，先看 ADR 0001。
+/// 云直连的上游端点（ADR 0011）。客户端不再经过自建服务器：
+/// 对话/看图走方舟的 Anthropic 兼容端点，语音走火山语音技术的 openspeech 网关。
+/// 这些地址是产品决策的一部分：改这里等于换上游，先看 docs/adr/0011。
 /// </summary>
 public static class WireProtocol
 {
-    public const string ChatPath = "chat";
-    public const string TtsPath = "ws/tts/volcengine";
-    public const string AsrPath = "ws/asr/volcengine";
-    public const string CapabilitiesPath = "capabilities";
-    public const string HealthPath = "healthz";
-
-    /// <summary>服务器端不看值，只看这个头存不存在。</summary>
-    public const string AuthorizationHeader = "authorization";
-
-    /// <summary>点点会带，服务端不校验；带上便于日志对账。</summary>
-    public const string ClientBuildHeader = "X-DianDian-Client-Build";
-    public const string ClientBuild = "0.1.0-xiaoliu";
+    /// <summary>火山方舟 Anthropic 兼容端点（对话 + 看图 + 工具回环）。</summary>
+    public const string ArkAnthropicEndpoint = "https://ark.cn-beijing.volces.com/api/anthropic/v1/messages";
 
     /// <summary>Anthropic Messages SSE 的结束帧是 <c>data: [DONE]</c>，不是 message_stop。</summary>
     public const string DoneMarker = "[DONE]";
 
-    public static Uri HttpUri(Uri baseUri, string path) => new(baseUri, path);
+    /// <summary>火山方舟（OpenAI 兼容 / Anthropic 兼容）都吃这个鉴权头。</summary>
+    public const string AuthorizationHeader = "authorization";
 
-    /// <summary>
-    /// WebSocket 地址。注意服务器把语音中继挂在 <c>/diandian/ws/*</c>，
-    /// 而 HTTP 挂在 <c>/diandian/proxy/*</c> —— 两者不是同一个前缀，
-    /// 所以这里把末尾的 <c>proxy</c> 去掉（点点的 ProxyWebSocket 常量也是这么配的）。
-    /// </summary>
-    public static Uri WebSocketUri(Uri baseUri, string path)
-    {
-        var root = new UriBuilder(baseUri);
-        var trimmed = root.Path.TrimEnd('/');
-        if (trimmed.EndsWith("/proxy", StringComparison.OrdinalIgnoreCase))
-        {
-            root.Path = trimmed[..^"/proxy".Length] + "/";
-        }
+    /// <summary>火山流式语音识别（大模型）WebSocket。凭证是语音技术 appid + access token。</summary>
+    public const string AsrWebSocketUrl = "wss://openspeech.bytedance.com/api/v3/saas/bigmodel";
 
-        var builder = new UriBuilder(new Uri(root.Uri, path))
-        {
-            Scheme = baseUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) ? "wss" : "ws",
-        };
-        if (builder.Uri.IsDefaultPort)
-        {
-            builder.Port = -1;
-        }
+    /// <summary>大模型流式语音识别的资源 ID（按时长计费档）。</summary>
+    public const string AsrResourceId = "volc.bigasr.sau.duration";
 
-        return builder.Uri;
-    }
+    /// <summary>大模型语音合成（双向流式）WebSocket。</summary>
+    public const string TtsWebSocketUrl = "wss://openspeech.bytedance.com/api/v3/tts/bidirection";
+
+    /// <summary>大模型语音合成的资源 ID。</summary>
+    public const string TtsResourceId = "volc.service_type.10029";
 }

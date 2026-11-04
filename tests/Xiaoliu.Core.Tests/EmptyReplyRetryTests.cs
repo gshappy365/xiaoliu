@@ -90,7 +90,7 @@ public sealed class EmptyReplyRetryTests : IDisposable
     }
 
     private ConversationAgent BuildAgent(ScriptedHandler handler) =>
-        new(new ChatClient(_settings, handler), _settings, _dispatcher, _evidence);
+        new(new ArkChatClient("test-key", handler), _settings, _dispatcher, _evidence);
 
     [Fact]
     public async Task RetriesOnceWhenReplyIsEmpty()

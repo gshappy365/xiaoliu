@@ -6,21 +6,38 @@ namespace Xiaoliu.Core.Configuration;
 /// <summary>
 /// 客户端全部可配置项。持久化在 <c>%LOCALAPPDATA%\xiaoliu\settings.json</c>。
 /// 默认值就是交接文档里定下的那一套，改默认值等于改产品行为，先看 docs/adr。
+///
+/// 云直连后（ADR 0011）客户端自带云凭证：三个密钥字段在文件里存的是
+/// <see cref="SecretProtector"/> 的受保护串（<c>dpapi:1:…</c>），不是明文；
+/// 运行时用对应的 <c>*Plain</c> 属性取明文。
 /// </summary>
 public sealed class AppSettings
 {
-    /// <summary>服务器端根地址（含 <c>/diandian/proxy</c> 前缀，与点点同形）。</summary>
-    public string BaseUrl { get; set; } = "https://127.0.0.1/diandian/proxy";
+    /// <summary>模型下拉里代表「自定义 OpenAI 兼容端点」的值，存在 <see cref="Model"/> 里。</summary>
+    public const string CustomModelKey = "custom";
 
-    /// <summary>服务器只检查 authorization 头存在，值不重要（见 rea/server/app/main.py）。</summary>
-    public string AccessToken { get; set; } = "selfhost";
+    /// <summary>火山方舟的 API key（受保护存储）。对话与看图都走它。</summary>
+    public string ArkApiKey { get; set; } = string.Empty;
 
-    /// <summary>服务器端自签 CA 未必覆盖 127.0.0.1，v1 允许跳过校验。</summary>
-    public bool AllowUntrustedTls { get; set; } = true;
+    /// <summary>火山语音技术的 App ID（受保护存储）。ASR/TTS 直连用。</summary>
+    public string VoiceAppId { get; set; } = string.Empty;
+
+    /// <summary>火山语音技术的 Access Token（受保护存储）。</summary>
+    public string VoiceAccessToken { get; set; } = string.Empty;
+
+    /// <summary>自定义 OpenAI 兼容端点的基地址（如 <c>https://api.deepseek.com/v1</c>），明文存。</summary>
+    public string CustomBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>自定义端点的 API key（受保护存储）。</summary>
+    public string CustomApiKey { get; set; } = string.Empty;
+
+    /// <summary>自定义端点上的模型名，自由填写（如 <c>deepseek-chat</c>）。</summary>
+    public string CustomModelName { get; set; } = string.Empty;
 
     /// <summary>
     /// 对话模型。默认取方舟的视觉旗舰 —— 小六的核心是「看屏幕 + 动手」，
-    /// 纯文本模型圈选/截图类提问会直接失效。设置页里可以从清单里换。
+    /// 纯文本模型圈选/截图类提问会直接失效。设置页里可以从清单里换；
+    /// 值为 <see cref="CustomModelKey"/> 时走自定义 OpenAI 兼容端点。
     /// </summary>
     public string Model { get; set; } = "doubao-seed-2-1-pro-260915";
 
@@ -70,7 +87,8 @@ public sealed class AppSettings
     /// <summary>默认不开：静默写自启项是用户最反感的一类行为。托盘菜单里显式勾选才写。</summary>
     public bool LaunchAtLogin { get; set; } = false;
 
-    public string TtsVoiceId { get; set; } = "volcengine.xiaohe";
+    /// <summary>火山 TTS 音色 ID（大模型语音合成，如 <c>zh_female_tianmeixiaoyuan_moon_bigtts</c>）。</summary>
+    public string TtsVoiceId { get; set; } = "zh_female_tianmeixiaoyuan_moon_bigtts";
 
     /// <summary>
     /// 录音设备序号，-1 跟随系统默认。机器上挂虚拟声卡（VB-Audio、远程桌面虚拟设备）时，
@@ -84,8 +102,19 @@ public sealed class AppSettings
 
     public int MaxToolCallsPerTurn { get; set; } = 20;
 
+    [JsonIgnore] public bool IsCustomModel => Model == CustomModelKey;
+
+    [JsonIgnore] public string? ArkApiKeyPlain => SecretProtector.Unprotect(ArkApiKey);
+
+    [JsonIgnore] public string? VoiceAppIdPlain => SecretProtector.Unprotect(VoiceAppId);
+
+    [JsonIgnore] public string? VoiceAccessTokenPlain => SecretProtector.Unprotect(VoiceAccessToken);
+
+    [JsonIgnore] public string? CustomApiKeyPlain => SecretProtector.Unprotect(CustomApiKey);
+
+    /// <summary>本轮请求真正发出去的模型标识（自定义端点用 <see cref="CustomModelName"/>）。</summary>
     [JsonIgnore]
-    public Uri BaseUri => new(BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+    public string UpstreamModel => IsCustomModel ? CustomModelName : Model;
 
     public static string DefaultDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "xiaoliu");
@@ -130,7 +159,11 @@ public sealed class AppSettings
         if (MaxTotalMegabytes < 16) MaxTotalMegabytes = 16;
         if (MaxModelRequestsPerTurn is < 1 or > 12) MaxModelRequestsPerTurn = 6;
         if (MaxToolCallsPerTurn is < 1 or > 60) MaxToolCallsPerTurn = 20;
-        if (string.IsNullOrWhiteSpace(BaseUrl)) BaseUrl = "https://127.0.0.1/diandian/proxy";
+        if (string.IsNullOrWhiteSpace(TtsVoiceId) || TtsVoiceId.StartsWith("volcengine.", StringComparison.OrdinalIgnoreCase))
+        {
+            // 旧值是服务器方言（volcengine.xiaohe 之类），直连后上游只认官方音色 ID。
+            TtsVoiceId = "zh_female_tianmeixiaoyuan_moon_bigtts";
+        }
         return this;
     }
 

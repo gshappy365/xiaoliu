@@ -1,5 +1,7 @@
 using System.IO;
 using System.Net.Http;
+using System.Text;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -8,6 +10,7 @@ using System.Windows.Threading;
 using Xiaoliu.Core.Capture;
 using Xiaoliu.Core.Configuration;
 using Xiaoliu.Core.Interop;
+using Xiaoliu.Core.Protocol;
 using Xiaoliu.Core.Storage;
 using Xiaoliu.App.Audio;
 
@@ -70,7 +73,7 @@ public partial class WorkspaceWindow : Window
         var versionText = $"v{version?.ToString(3) ?? "0.0.0"}";
         VersionText.Text = $"小六 {versionText}";
         AboutVersionText.Text = versionText;
-        EndpointText.Text = _settings.BaseUrl;
+        EndpointText.Text = DescribeEndpoint();
 
         _companion.TurnFinished += OnTurnFinished;
 
@@ -381,6 +384,16 @@ public partial class WorkspaceWindow : Window
             ModelPicker.Items.Add(Item(
                 model.Display, model.Id, $"{model.Id}\n{model.Vendor} · {model.Note}"));
         }
+
+        if (!string.IsNullOrWhiteSpace(_settings.CustomBaseUrl) &&
+            !string.IsNullOrWhiteSpace(_settings.CustomModelName))
+        {
+            ModelPicker.Items.Add(Header("自定义端点"));
+            ModelPicker.Items.Add(Item(
+                $"自定义：{_settings.CustomModelName}",
+                AppSettings.CustomModelKey,
+                $"{_settings.CustomModelName}\n{_settings.CustomBaseUrl}\nOpenAI 兼容端点；工具与圈选图已翻译成 function calling / image_url"));
+        }
     }
 
     /// <summary>按标识选中；清单里没有就临时插一项，免得下拉框显示空白。</summary>
@@ -503,9 +516,12 @@ public partial class WorkspaceWindow : Window
         SelectModel(_settings.Model);
         VoicePicker.Text = _settings.TtsVoiceId;
 
-        BaseUrlBox.Text = _settings.BaseUrl;
-        TokenBox.Text = _settings.AccessToken;
-        UntrustedTlsSwitch.IsChecked = _settings.AllowUntrustedTls;
+        CustomBaseUrlBox.Text = _settings.CustomBaseUrl;
+        CustomModelBox.Text = _settings.CustomModelName;
+        // 密码框留空 = 保持已配置的值；只有用户真输入了才覆盖（见 OnSaveConnectionClick）。
+        ConnectionResultText.Text = string.IsNullOrEmpty(_settings.ArkApiKey)
+            ? "方舟 key 未配置，填好点「保存」"
+            : "方舟 key 已配置（重填即覆盖）";
 
         RefreshHome();
     }
@@ -916,40 +932,85 @@ public partial class WorkspaceWindow : Window
 
     // ------------------------------------------------------------------ 连接
 
-    private void OnUntrustedTlsChanged(object sender, RoutedEventArgs e)
-    {
-        if (_loading)
-        {
-            return;
-        }
-
-        _settings.AllowUntrustedTls = UntrustedTlsSwitch.IsChecked == true;
-        Save();
-    }
-
     private async void OnSaveConnectionClick(object sender, RoutedEventArgs e)
     {
-        _settings.BaseUrl = BaseUrlBox.Text.Trim();
-        _settings.AccessToken = TokenBox.Text.Trim();
-        _settings.Normalize();
+        // 密码框留空 = 保持原值；填了就重新加密覆盖（SecretProtector 幂等，不会套两层）。
+        if (ArkKeyBox.Password.Length > 0)
+        {
+            _settings.ArkApiKey = SecretProtector.Protect(ArkKeyBox.Password);
+        }
+
+        if (VoiceAppIdBox.Password.Length > 0)
+        {
+            _settings.VoiceAppId = SecretProtector.Protect(VoiceAppIdBox.Password);
+        }
+
+        if (VoiceTokenBox.Password.Length > 0)
+        {
+            _settings.VoiceAccessToken = SecretProtector.Protect(VoiceTokenBox.Password);
+        }
+
+        if (CustomKeyBox.Password.Length > 0)
+        {
+            _settings.CustomApiKey = SecretProtector.Protect(CustomKeyBox.Password);
+        }
+
+        _settings.CustomBaseUrl = CustomBaseUrlBox.Text.Trim();
+        _settings.CustomModelName = CustomModelBox.Text.Trim();
         Save();
 
-        EndpointText.Text = _settings.BaseUrl;
+        EndpointText.Text = DescribeEndpoint();
         ConnectionResultText.Text = "正在测试…";
+        ConnectionResultText.Text = await TestUpstreamAsync();
+        FillModelPicker();
+    }
 
+    /// <summary>向上游发一次 1 token 的非流式请求，验证网络与鉴权都通。</summary>
+    private async Task<string> TestUpstreamAsync()
+    {
         try
         {
-            using var client = new HttpClient();
-            var uri = new Uri(_settings.BaseUri, "healthz");
-            var response = await client.GetAsync(uri);
-            ConnectionResultText.Text = response.IsSuccessStatusCode
-                ? $"通（{(int)response.StatusCode}）"
-                : $"返回 {(int)response.StatusCode}";
+            var isCustom = _settings.IsCustomModel;
+            var url = isCustom
+                ? OpenAiChatClient.BuildEndpoint(_settings.CustomBaseUrl)
+                : WireProtocol.ArkAnthropicEndpoint;
+            var key = (isCustom ? _settings.CustomApiKeyPlain : _settings.ArkApiKeyPlain)
+                      ?? throw new InvalidOperationException("密钥解不开（换机器后需重填）");
+            var body = new JsonObject
+            {
+                ["model"] = _settings.UpstreamModel,
+                ["max_tokens"] = 1,
+                ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = "ping" }),
+            };
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            using var message = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
+            };
+            message.Headers.TryAddWithoutValidation(WireProtocol.AuthorizationHeader, "Bearer " + key);
+            if (!isCustom)
+            {
+                message.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+            }
+
+            using var response = await client.SendAsync(message);
+            return response.IsSuccessStatusCode
+                ? $"通（HTTP {(int)response.StatusCode}）"
+                : $"上游返回 {(int)response.StatusCode}，检查 key 与模型名";
         }
         catch (Exception ex)
         {
-            ConnectionResultText.Text = "连不上：" + ex.Message;
+            return "连不上：" + ex.Message;
         }
+    }
+
+    /// <summary>侧栏那行「现在用谁」：模型 + 上游来源。</summary>
+    private string DescribeEndpoint()
+    {
+        return _settings.IsCustomModel
+            ? $"自定义端点 · {_settings.CustomModelName}"
+            : $"{_settings.Model} · 火山方舟";
     }
 
     // ------------------------------------------------------------------ 对话页

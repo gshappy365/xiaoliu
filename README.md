@@ -1,11 +1,13 @@
 # xiaoliu.exe
 
-自建服务器端的 Windows 客户端。与点点并列存在，不是点点的补丁 —— 点点继续当协议判定器。
+单机本地使用的 Windows 客户端（ADR 0011）：对话/看图直连火山方舟的 Anthropic 兼容端点，
+语音直连火山语音技术网关，密钥由用户自己填、DPAPI 加密落盘 —— 不再需要任何自建服务器。
+与点点并列存在，不是点点的补丁。
 
 ## 结构
 
 ```
-src/Xiaoliu.Core/     线协议、工具与策略、取图、存储、语音中继（无 UI，可单测）
+src/Xiaoliu.Core/     云直连传输、工具与策略、取图、存储、语音直连（无 UI，可单测）
 src/Xiaoliu.App/      WPF 常驻客户端：托盘 + 胶囊 + 字幕条 + 指点层 + 圈选层 + 主工作区
 src/Xiaoliu.Cli/      无界面联调台，用来证明协议层通了
 tests/                单元测试（SSE 分帧、工具策略、留存、内容指纹）
@@ -55,21 +57,25 @@ dotnet publish src/Xiaoliu.App/Xiaoliu.App.csproj -c Release   # 单文件 exe
 
 **设置页**：七类 —— 通用（自启、热键、按住时长、自检）、语音（设备、试麦、音色、中间结果）、
 模型（模型、推理强度、请求上限）、外观（胶囊、气泡跟随、指点图形）、数据（留存、上限、
-清空）、连接（服务端地址与令牌）、关于（版本与策略说明）。改完即存。
+清空）、模型服务（方舟 key、火山语音凭证、自定义 OpenAI 兼容端点）、关于（版本与策略说明）。
+改完即存；密钥留空表示保持已配置的值。
 
 **模型下拉**的候选来自火山方舟（`arkcli models list`），按能力分两组：能看懂截屏的 10 个、
 只看文本的 13 个。清单是 2026-10-30 的快照，写死在
 `Xiaoliu.Core/Configuration/ModelCatalog.cs`，过期了照那里的注释重新生成。
-选中的名字存进 `settings.json` 的 `Model`，**服务端按它决定这一轮走哪家上游**：`doubao-` /
-`deepseek-` / `qwen` / `glm-` / `kimi-` 前缀的走火山方舟的 Anthropic 兼容端点（客户端发什么
-model 就用什么），其余（如 `spark-x2.6`）继续走默认上游。换模型后下一轮生效。
+选中的名字存进 `settings.json` 的 `Model`，云直连后客户端把它直接发给方舟的
+Anthropic 兼容端点（`ark.cn-beijing.volces.com/api/anthropic/v1/messages`）。换模型后下一轮生效。
 
-选纯文本模型时，圈选/截图类提问会失效 —— 下拉里已经标出来了。
+选纯文本模型时，圈选/截图类提问会被直接拦下并提示换「能看懂截屏」的模型 ——
+服务器的 VL 转述兜底已随解耦取消（ADR 0011），客户端不再替你把图转成文字。
 
-**视觉组直连**：选中「能看懂截屏」那一组的模型时，客户端会在请求里带 `vision_capable`，
-服务端把图片原样透传给模型，不再先跑一遍 VL 描述。实测同一张截图：直连首字 1957ms、
-总 2870ms；纯文本模型走 VL 转述首字 4898ms、总 5054ms。详见
-`docs/adr/0009-vision-passthrough.md`。
+**推理强度**：低/标准/深 对应 Anthropic 原生 `thinking` 的 1024/4096/8191 预算；
+预算装不下 `max_tokens` 时会自动抬高上限。这是把原服务器私有字段
+`main_reasoning_effort` 换成协议原生参数，实测口径以你机器上的冒烟为准。
+
+**自定义端点**：在「模型服务」里填一个 OpenAI 兼容的 base URL + key + 模型名，
+模型下拉会多出「自定义：模型名」一项。工具回环翻译成 function calling、
+圈选图翻译成 `image_url`、工具回执走 `role:"tool"` 消息 —— 能力与方舟组对齐。
 
 结构与点点的 `MainWorkspaceWindow` 同构（左侧 232 DIP 导航 + 设置作为窗口内的一页 + 二级分类 +
 52 高的设置行），但不搬账号、课程、技能、积分这四类 —— 小六没有对应能力，摆上去是死入口。
@@ -92,12 +98,18 @@ xiaoliu.exe --demo typing   # 退出码 0 = 通过
 
 **改这个文件前先退出小六**：配置是整份读进内存的，退出或改设置时会整份写回，运行期间手改会被覆盖。
 
+密钥三个字段（`ArkApiKey`、`VoiceAppId`、`VoiceAccessToken`，外加可选的 `CustomApiKey`）
+**在文件里是 DPAPI 加密串**（`dpapi:1:…`，Windows 当前用户级），不是明文 —— 别想直接手改，
+到设置 → 模型服务里填，留空表示保持原值。换机器或重装系统后密文解不开，重填一次即可。
+
 ```json
 {
-  "BaseUrl": "https://127.0.0.1/diandian/proxy",
-  "AccessToken": "selfhost",
-  "AllowUntrustedTls": true,
-  "Model": "aliyun.qwen3.8-flash",
+  "ArkApiKey": "dpapi:1:…",
+  "VoiceAppId": "dpapi:1:…",
+  "VoiceAccessToken": "dpapi:1:…",
+  "Model": "doubao-seed-2-1-pro-260915",
+  "CustomBaseUrl": "",
+  "CustomModelName": "",
   "PushToTalkModifiers": "Control,Alt",
   "SelectRegionModifiers": "Control,Alt",
   "SelectRegionKey": "S",
@@ -107,16 +119,16 @@ xiaoliu.exe --demo typing   # 退出码 0 = 通过
 }
 ```
 
-`BaseUrl` 指向服务器端，**不需要改 hosts**。HTTP 走 `/diandian/proxy/*`，WebSocket 走 `/diandian/ws/*`，前缀不同是服务器端的选择，`WireProtocol.WebSocketUri` 负责换算。
-
-`AllowUntrustedTls` 默认 `true`：服务器端那张自签 CA 的 SAN 是 botlearn 域名，主机名校验对 `127.0.0.1` 必然失败。接真云端前把它改回 `false`。
+上游端点写死在 `WireProtocol`：方舟 `https://ark.cn-beijing.volces.com/api/anthropic/v1/messages`，
+语音 `wss://openspeech.bytedance.com/api/v3/{saas/bigmodel, tts/bidirection}`。旧配置里的
+`BaseUrl`/`AccessToken`/`AllowUntrustedTls` 已随服务器路径一起删除，读入时被忽略。
 
 ## 联调
 
-服务器端在跑（`cd /d/gao/wbai/rea && bash server/start-real.sh`）之后：
+不需要服务器。先在设置 → 模型服务里填好方舟 key（语音验收再填语音凭证），然后：
 
 ```bash
-# 1. 通不通
+# 1. 凭证与上游连通（真实往返一次，1 token）
 ./src/Xiaoliu.Cli/bin/Debug/net8.0-windows/xiaoliu-cli.exe health
 
 # 2. 一轮对话（不声明工具）
@@ -128,7 +140,7 @@ xiaoliu.exe --demo typing   # 退出码 0 = 通过
 # 4. 带圈选图 + 指点
 .../xiaoliu-cli.exe chat --tools --capture "我圈了这块屏幕，用指点告诉我最左边的图标在哪"
 
-# 5. 语音两端
+# 5. 语音两端（直连火山，需要语音凭证）
 .../xiaoliu-cli.exe asr /path/to/16k-mono.wav
 .../xiaoliu-cli.exe tts "小六在这里" --out tts.wav
 ```
@@ -151,7 +163,7 @@ xiaoliu.exe --demo typing   # 退出码 0 = 通过
 - 同一时间只能和一个进程抢热键：小六与点点同时运行会互相干扰，二选一。
 - `insert_text` 要求能把目标窗口切到前台。切不过去（比如目标被别的程序盖着、或用户在切过去的瞬间又点了别处）就**一个字符都不打**并回 `target_not_focusable` / `target_lost_focus`，请用户手动点一下目标窗口再说一次。宁可没填，也不能填错地方。
 - `report_text_insertion` 的 `written` 结论被策略拒绝（没有画面可核对），填字只能到 `uncertain`。
-- 语音中继的 partial 依赖服务器端滚动重解码，`doubao` 后端没有 partial。
+- 语音直连火山后，partial 是火山流式识别的原生行为（识别中持续下发累计文本），不再有服务器滚动重解码那一层。
 - 多屏只按虚拟桌面并集写，没在真实多屏机器上验过。
 - 设置里改的项生效时机不一致：模型/音色/推理强度下一轮生效，胶囊显隐要重开，留存天数下次启动清理时才生效。
 - 主窗口没有深色/浅色切换，只有深色一套。

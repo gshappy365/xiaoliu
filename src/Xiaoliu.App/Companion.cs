@@ -27,7 +27,7 @@ public sealed class Companion : IDisposable
     private readonly AudioEngine _audio = new();
     private readonly VisualEvidence _evidence;
     private readonly HistoryStore _history;
-    private readonly ChatClient _chat;
+    private readonly IChatTransport _chat;
     private readonly ToolDispatcher _dispatcher;
     private readonly ConversationAgent _agent;
 
@@ -54,7 +54,7 @@ public sealed class Companion : IDisposable
 
         _evidence = evidence ?? new VisualEvidence();
         _history = HistoryStore.OpenDefault(settings);
-        _chat = new ChatClient(settings);
+        _chat = ChatTransportFactory.Create(settings);
         _dispatcher = new ToolDispatcher(settings, _evidence, _history)
         {
             GuidanceRequested = mark => Ui(() =>
@@ -196,8 +196,10 @@ public sealed class Companion : IDisposable
             _capturePeak = 0;
             _captureBytes = 0;
 
-            var uri = WireProtocol.WebSocketUri(_settings.BaseUri, WireProtocol.AsrPath);
-            var session = await AsrSession.ConnectAsync(uri, AudioEngine.CaptureSampleRate, token, _settings.AllowUntrustedTls);
+            var session = await AsrSession.ConnectAsync(
+                _settings.VoiceAppIdPlain ?? string.Empty,
+                _settings.VoiceAccessTokenPlain ?? string.Empty,
+                AudioEngine.CaptureSampleRate, token);
             session.PartialReceived += text =>
             {
                 if (_settings.ShowAsrPartial && !string.IsNullOrWhiteSpace(text))
@@ -347,8 +349,7 @@ public sealed class Companion : IDisposable
             // 打字提问不念出来，就别白连一条 WebSocket。
             if (speak)
             {
-                var ttsUri = WireProtocol.WebSocketUri(_settings.BaseUri, WireProtocol.TtsPath);
-                _tts = await TryConnectTtsAsync(ttsUri, token);
+                _tts = await TryConnectTtsAsync(token);
             }
 
             var result = await _agent.RunTurnAsync(question, BuildRuntimeContext(), token);
@@ -384,11 +385,14 @@ public sealed class Companion : IDisposable
         }
     }
 
-    private async Task<TtsSession?> TryConnectTtsAsync(Uri uri, CancellationToken token)
+    private async Task<TtsSession?> TryConnectTtsAsync(CancellationToken token)
     {
         try
         {
-            var session = await TtsSession.ConnectAsync(uri, _settings.TtsVoiceId, token, _settings.AllowUntrustedTls);
+            var session = await TtsSession.ConnectAsync(
+                _settings.VoiceAppIdPlain ?? string.Empty,
+                _settings.VoiceAccessTokenPlain ?? string.Empty,
+                _settings.TtsVoiceId, token);
             session.AudioReceived += pcm => _audio.AddPcm(pcm);
             _audio.StartPlayback();
             return session;
@@ -541,7 +545,11 @@ public sealed class Companion : IDisposable
     {
         Interrupt();
         _audio.Dispose();
-        _chat.Dispose();
+        if (_chat is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
         _history.Dispose();
     }
 }

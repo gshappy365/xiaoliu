@@ -42,18 +42,18 @@ public sealed class ModelCatalogTests
     }
 
     [Fact]
-    public void Every_id_uses_a_prefix_the_server_routes_to_ark()
+    public void Every_id_is_an_ark_model_sent_verbatim()
     {
         Assert.NotEmpty(ModelCatalog.All);
 
-        // 服务端按前缀把请求转到方舟的 Anthropic 兼容端点（见 server/app/upstream.py
-        // 的 _ARK_MODEL_PREFIXES）。前缀对不上就会被悄悄发到默认上游，
-        // 表现是「界面上选了 A，实际回答来自 B」—— 这类错误很难发现。
+        // 云直连后（ADR 0011）清单里的 id 原样发给方舟的 Anthropic 兼容端点，
+        // 没有服务器再兜底路由。这组前缀是「这确实是方舟模型」的保守校验：
+        // 自定义端点的模型走 CustomModelName，不该混进这份清单。
         string[] prefixes = ["doubao-", "deepseek-", "qwen", "glm-", "kimi-"];
 
         Assert.All(ModelCatalog.All, m =>
             Assert.True(prefixes.Any(p => m.Id.StartsWith(p, StringComparison.OrdinalIgnoreCase)),
-                $"{m.Id} 的前缀服务端不认识，会被路由到默认上游"));
+                $"{m.Id} 不像方舟模型，直连会被上游拒绝"));
     }
 
     [Fact]
