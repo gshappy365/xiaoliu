@@ -47,7 +47,23 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) =>
         {
             Log.Error("未处理异常", args.Exception);
+            // 光写日志用户看不见 —— 静默失败比崩溃更难查。
+            // 弹窗说清出了什么事、去哪看日志。
+            MessageBox.Show(
+                "小六遇到了一个问题，这一轮可能没完成。\n\n" +
+                args.Exception.Message +
+                "\n\n详细信息看日志目录：\n" + Log.LogDirectory,
+                "小六", MessageBoxButton.OK, MessageBoxImage.Warning);
             args.Handled = true;
+        };
+
+        // 后台线程的异常不走 DispatcherUnhandledException，不接住就是进程直接消失。
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+            {
+                Log.Error("后台异常", ex);
+            }
         };
 
         var settings = AppSettings.Load();

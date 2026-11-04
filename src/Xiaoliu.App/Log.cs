@@ -13,6 +13,9 @@ public static class Log
     private static readonly string Directory =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "xiaoliu", "logs");
 
+    /// <summary>日志目录。报错弹窗里要给用户看，不然用户不知道去哪儿翻。</summary>
+    public static string LogDirectory => Directory;
+
     public static void Info(string area, string message) => Write("INFO", area, message);
 
     public static void Error(string area, Exception exception) =>
