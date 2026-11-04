@@ -331,35 +331,63 @@
                                     </local:SettingsRowControl>
                                 </StackPanel>
 
-                                <!-- ============ 模型服务（ADR 0011：云直连，客户端自带密钥） ============ -->
+                                <!-- ============ 模型服务（ADR 0012：云直连 / 本地服务器 双模式） ============ -->
                                 <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed">
-                                    <TextBlock Text="对话与看图（火山方舟）" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
-                                    <local:SettingsRowControl Title="方舟 API Key"
-                                                              Description="方舟控制台「API Key 管理」里建；DPAPI 加密落盘，换机器要重填。留空表示保持已配置的值">
-                                        <PasswordBox x:Name="ArkKeyBox" Width="300" />
+                                    <TextBlock Text="连接方式" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                    <local:SettingsRowControl Title="走哪条链路"
+                                                              Description="云直连＝客户端自带密钥直连火山，不依赖任何服务器进程；本地服务器＝三条链路都经本机服务器端">
+                                        <ComboBox x:Name="ConnectionModePicker" Style="{StaticResource PickerStyle}" Width="280"
+                                                  SelectionChanged="OnConnectionModeChanged" />
                                     </local:SettingsRowControl>
 
-                                    <TextBlock Text="语音（火山语音技术）" Style="{StaticResource SectionText}" />
-                                    <local:SettingsRowControl Title="语音 App ID"
-                                                              Description="语音技术控制台的 APP ID，与方舟 key 是两套">
-                                        <PasswordBox x:Name="VoiceAppIdBox" Width="300" />
-                                    </local:SettingsRowControl>
-                                    <local:SettingsRowControl Title="语音 Access Token"
-                                                              Description="语音技术控制台的 Access Token。留空表示保持已配置的值">
-                                        <PasswordBox x:Name="VoiceTokenBox" Width="300" />
-                                    </local:SettingsRowControl>
+                                    <!-- 云直连分区 -->
+                                    <StackPanel x:Name="CloudKeyPanel">
+                                        <TextBlock Text="对话与看图（火山方舟）" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                        <local:SettingsRowControl Title="方舟 API Key"
+                                                                  Description="方舟控制台「API Key 管理」里建；DPAPI 加密落盘，换机器要重填。留空表示保持已配置的值">
+                                            <PasswordBox x:Name="ArkKeyBox" Style="{StaticResource PasswordBoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
 
-                                    <TextBlock Text="自定义 OpenAI 兼容端点（可选）" Style="{StaticResource SectionText}" />
-                                    <local:SettingsRowControl Title="Base URL"
-                                                              Description="如 https://api.deepseek.com/v1；配好后到「模型」页选「自定义」项">
-                                        <TextBox x:Name="CustomBaseUrlBox" Style="{StaticResource BoxStyle}" Width="300" />
-                                    </local:SettingsRowControl>
-                                    <local:SettingsRowControl Title="API Key" Description="自定义端点的密钥，同样加密落盘。留空表示保持已配置的值">
-                                        <PasswordBox x:Name="CustomKeyBox" Width="300" />
-                                    </local:SettingsRowControl>
-                                    <local:SettingsRowControl Title="模型名" Description="自由填写，如 deepseek-chat；下拉里显示为「自定义：模型名」">
-                                        <TextBox x:Name="CustomModelBox" Style="{StaticResource BoxStyle}" Width="300" />
-                                    </local:SettingsRowControl>
+                                        <TextBlock Text="语音（火山语音技术）" Style="{StaticResource SectionText}" />
+                                        <local:SettingsRowControl Title="语音 App ID"
+                                                                  Description="语音技术控制台的 APP ID，与方舟 key 是两套">
+                                            <PasswordBox x:Name="VoiceAppIdBox" Style="{StaticResource PasswordBoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+                                        <local:SettingsRowControl Title="语音 Access Token"
+                                                                  Description="语音技术控制台的 Access Token。留空表示保持已配置的值">
+                                            <PasswordBox x:Name="VoiceTokenBox" Style="{StaticResource PasswordBoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+
+                                        <TextBlock Text="自定义 OpenAI 兼容端点（可选）" Style="{StaticResource SectionText}" />
+                                        <local:SettingsRowControl Title="Base URL"
+                                                                  Description="如 https://api.deepseek.com/v1；配好后到「模型」页选「自定义」项">
+                                            <TextBox x:Name="CustomBaseUrlBox" Style="{StaticResource BoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+                                        <local:SettingsRowControl Title="API Key" Description="自定义端点的密钥，同样加密落盘。留空表示保持已配置的值">
+                                            <PasswordBox x:Name="CustomKeyBox" Style="{StaticResource PasswordBoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+                                        <local:SettingsRowControl Title="模型名" Description="自由填写，如 deepseek-chat；下拉里显示为「自定义：模型名」">
+                                            <TextBox x:Name="CustomModelBox" Style="{StaticResource BoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+                                    </StackPanel>
+
+                                    <!-- 本地服务器分区 -->
+                                    <StackPanel x:Name="LocalServerPanel" Visibility="Collapsed">
+                                        <TextBlock Text="本地服务器" Style="{StaticResource SectionText}" Margin="0,0,0,6" />
+                                        <local:SettingsRowControl Title="服务器地址"
+                                                                  Description="本机服务器端的基地址，如 https://127.0.0.1/diandian/proxy">
+                                            <TextBox x:Name="ServerBaseUrlBox" Style="{StaticResource BoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+                                        <local:SettingsRowControl Title="访问口令"
+                                                                  Description="本地服务器的自定口令；明文存，不是云凭证">
+                                            <TextBox x:Name="ServerTokenBox" Style="{StaticResource BoxStyle}" Width="300" />
+                                        </local:SettingsRowControl>
+                                        <local:SettingsRowControl Title="允许不信任证书"
+                                                                  Description="服务器端用自签证书，主机名校验必然失败；只在可信的本机服务器上开">
+                                            <CheckBox x:Name="AllowUntrustedTlsSwitch" Style="{StaticResource SwitchStyle}"
+                                                      Click="OnAllowUntrustedTlsChanged" />
+                                        </local:SettingsRowControl>
+                                    </StackPanel>
 
                                     <local:SettingsRowControl Title="保存并测试" Description="保存后向上游发一次 1 token 的真实请求验证连通">
                                         <StackPanel Orientation="Horizontal">

@@ -28,7 +28,8 @@ public sealed class ConversationAgent
 
     private const int MaxHistoryExchanges = 10;
 
-    private readonly IChatTransport _chat;
+    // transport 可替换：设置页改了连接方式/端点/密钥后要重建（ADR 0012）。
+    private IChatTransport _chat;
     private readonly AppSettings _settings;
     private readonly ToolDispatcher _dispatcher;
     private readonly VisualEvidence _evidence;
@@ -45,6 +46,9 @@ public sealed class ConversationAgent
         _dispatcher = dispatcher;
         _evidence = evidence;
     }
+
+    /// <summary>换掉传输实现（设置页保存后调用），对话历史保留。</summary>
+    public void ReplaceTransport(IChatTransport chat) => _chat = chat;
 
     /// <summary>流式可见文本（累积全文），用来刷字幕条。</summary>
     public event Action<string>? TextUpdated;
@@ -106,6 +110,9 @@ public sealed class ConversationAgent
                 Tools = allowTools ? ToolCatalog.All : null,
                 MaxTokens = allowTools ? _settings.MaxTokensWithTools : _settings.MaxTokensWithoutTools,
                 ReasoningEffort = _settings.ReasoningEffort,
+                // 本地服务器模式要靠这个字段决定图片原样透传还是跑 VL/OCR 转文本
+                // （ADR 0012）。云直连模式下客户端自己拒纯文本模型，这个字段用不上。
+                VisionCapable = IsVisionCapable(),
             };
 
             requests++;

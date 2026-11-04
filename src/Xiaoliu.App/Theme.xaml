@@ -268,6 +268,36 @@
     </Style>
 
     <!--
+        PasswordBox 必须自带模板：BoxStyle 的 TargetType 是 TextBox，套不到
+        PasswordBox 上，四个密钥框会用 WPF 默认样式 —— 深色主题下是刺眼的白底方框。
+    -->
+    <Style x:Key="PasswordBoxStyle" TargetType="PasswordBox">
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="CaretBrush" Value="{StaticResource TextBrush}" />
+        <Setter Property="Background" Value="{StaticResource CardBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="Shell" CornerRadius="6" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsFocused" Value="True">
+                            <Setter TargetName="Shell" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         ComboBox 必须自带模板：默认模板的选中项用系统浅色主题的前景色（近黑），
         在深色面板上等于看不见 —— 实测就是「框在那儿但是空白」。
     -->

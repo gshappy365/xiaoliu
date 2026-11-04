@@ -27,15 +27,19 @@ public sealed class Companion : IDisposable
     private readonly AudioEngine _audio = new();
     private readonly VisualEvidence _evidence;
     private readonly HistoryStore _history;
-    private readonly IChatTransport _chat;
-    private readonly ToolDispatcher _dispatcher;
+
+    // transport 与 agent 不是 readonly：设置页改了连接方式/端点/密钥后必须重建，
+    // 否则旧凭据会一直烤在构造时创建的那一份里 —— 设置页显示「通」但真实对话 401。
+    private readonly object _transportGate = new();
+    private IChatTransport _chat;
     private readonly ConversationAgent _agent;
+    private readonly ToolDispatcher _dispatcher;
 
     private readonly object _gate = new();
     private readonly List<byte> _pendingAudio = new();
     private CancellationTokenSource? _turn;
-    private AsrSession? _asr;
-    private TtsSession? _tts;
+    private IAsrSession? _asr;
+    private ITtsSession? _tts;
     private DateTimeOffset _pressStartedAt;
     private bool _listening;
     private string _lastQuestion = string.Empty;
@@ -79,6 +83,33 @@ public sealed class Companion : IDisposable
 
         _audio.AudioCaptured += OnAudioCaptured;
         _audio.CaptureDeviceNumber = settings.CaptureDeviceNumber;
+    }
+
+    /// <summary>
+    /// 设置页改了连接方式、端点或密钥之后调用：重建 transport 与 agent。
+    ///
+    /// 不重建的话旧凭据会一直烤在构造时创建的那一份里 ——
+    /// 设置页「保存并测试」测的是新建的请求，永远通；真实对话用的是旧凭据，永远 401。
+    /// （上一轮 PR 审查的阻断项 B1。）
+    /// </summary>
+    public void RebuildTransport()
+    {
+        var previous = _chat;
+        var replacement = ChatTransportFactory.Create(_settings);
+
+        lock (_transportGate)
+        {
+            _chat = replacement;
+            // 复用同一个 Agent，只换它的传输实现 —— 对话历史不能因为改了个设置就没了。
+            _agent.ReplaceTransport(replacement);
+        }
+
+        if (previous is IDisposable disposable && !ReferenceEquals(previous, replacement))
+        {
+            disposable.Dispose();
+        }
+
+        Log.Info("transport", $"已重建（模式={_settings.ConnectionMode}）");
     }
 
     /// <summary>主窗口要读它来显示「这一轮可以看到的画面」，所以暴露出来而不是再开一份。</summary>
@@ -196,10 +227,8 @@ public sealed class Companion : IDisposable
             _capturePeak = 0;
             _captureBytes = 0;
 
-            var session = await AsrSession.ConnectAsync(
-                _settings.VoiceAppIdPlain ?? string.Empty,
-                _settings.VoiceAccessTokenPlain ?? string.Empty,
-                AudioEngine.CaptureSampleRate, token);
+            var session = await VoiceSessionFactory.ConnectAsrAsync(
+                _settings, AudioEngine.CaptureSampleRate, token);
             session.PartialReceived += text =>
             {
                 if (_settings.ShowAsrPartial && !string.IsNullOrWhiteSpace(text))
@@ -258,7 +287,7 @@ public sealed class Companion : IDisposable
         }
     }
 
-    private async Task SendAudioAsync(AsrSession session, byte[] chunk)
+    private async Task SendAudioAsync(IAsrSession session, byte[] chunk)
     {
         try
         {
@@ -385,14 +414,11 @@ public sealed class Companion : IDisposable
         }
     }
 
-    private async Task<TtsSession?> TryConnectTtsAsync(CancellationToken token)
+    private async Task<ITtsSession?> TryConnectTtsAsync(CancellationToken token)
     {
         try
         {
-            var session = await TtsSession.ConnectAsync(
-                _settings.VoiceAppIdPlain ?? string.Empty,
-                _settings.VoiceAccessTokenPlain ?? string.Empty,
-                _settings.TtsVoiceId, token);
+            var session = await VoiceSessionFactory.ConnectTtsAsync(_settings, token);
             session.AudioReceived += pcm => _audio.AddPcm(pcm);
             _audio.StartPlayback();
             return session;
@@ -440,7 +466,7 @@ public sealed class Companion : IDisposable
         return trimmed.Length > 0 && "。！？!?…\n".Contains(trimmed[^1]);
     }
 
-    private async Task SendSpeechAsync(TtsSession session, string text)
+    private async Task SendSpeechAsync(ITtsSession session, string text)
     {
         try
         {

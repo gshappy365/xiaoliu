@@ -16,6 +16,37 @@ public sealed class AppSettings
     /// <summary>模型下拉里代表「自定义 OpenAI 兼容端点」的值，存在 <see cref="Model"/> 里。</summary>
     public const string CustomModelKey = "custom";
 
+    /// <summary>连接方式：云直连（ADR 0011）。</summary>
+    public const string ConnectionModeCloud = "cloud";
+
+    /// <summary>连接方式：本地服务器（ADR 0012）。</summary>
+    public const string ConnectionModeLocalServer = "local-server";
+
+    /// <summary>
+    /// 走哪条链路（ADR 0012）。<see cref="ConnectionModeCloud"/> 是云直连：
+    /// 对话与看图走火山方舟，语音走火山语音技术，客户端自带凭证。
+    /// <see cref="ConnectionModeLocalServer"/> 是本地服务器：三条链路都经本机服务器端。
+    /// </summary>
+    public string ConnectionMode { get; set; } = ConnectionModeCloud;
+
+    /// <summary>
+    /// 本地服务器模式的基地址，如 <c>https://127.0.0.1/diandian/proxy</c>。明文存。
+    /// 云直连模式下不读。
+    /// </summary>
+    public string BaseUrl { get; set; } = "https://127.0.0.1/diandian/proxy";
+
+    /// <summary>
+    /// 本地服务器模式的访问口令，明文存 —— 它不是云凭证，DPAPI 加密只会带来
+    /// 「换机后解不开」的麻烦而没有安全收益。
+    /// </summary>
+    public string AccessToken { get; set; } = "selfhost";
+
+    /// <summary>
+    /// 本地服务器模式：放行自签证书。服务器端的证书 SAN 是 botlearn 域名，
+    /// 走 127.0.0.1 时主机名校验必然失败。云直连模式下不读。
+    /// </summary>
+    public bool AllowUntrustedTls { get; set; } = true;
+
     /// <summary>火山方舟的 API key（受保护存储）。对话与看图都走它。</summary>
     public string ArkApiKey { get; set; } = string.Empty;
 
@@ -104,6 +135,15 @@ public sealed class AppSettings
 
     [JsonIgnore] public bool IsCustomModel => Model == CustomModelKey;
 
+    /// <summary>当前是不是走本地服务器（ADR 0012）。</summary>
+    [JsonIgnore] public bool IsLocalServerMode => ConnectionMode == ConnectionModeLocalServer;
+
+    /// <summary>当前是不是走云直连（ADR 0011）。</summary>
+    [JsonIgnore] public bool IsCloudDirectMode => !IsLocalServerMode;
+
+    /// <summary>本地服务器模式的基地址。空值会在 <see cref="Normalize"/> 里补回默认值。</summary>
+    [JsonIgnore] public Uri ServerBaseUri => new(BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
     [JsonIgnore] public string? ArkApiKeyPlain => SecretProtector.Unprotect(ArkApiKey);
 
     [JsonIgnore] public string? VoiceAppIdPlain => SecretProtector.Unprotect(VoiceAppId);
@@ -164,6 +204,30 @@ public sealed class AppSettings
             // 旧值是服务器方言（volcengine.xiaohe 之类），直连后上游只认官方音色 ID。
             TtsVoiceId = "zh_female_tianmeixiaoyuan_moon_bigtts";
         }
+
+        // 连接方式只认两个值。配置被手改过或从别的版本迁来时兜回云直连 ——
+        // 那是 ADR 0011 的默认形态，也是唯一不依赖外部进程的一条。
+        if (ConnectionMode is not (ConnectionModeCloud or ConnectionModeLocalServer))
+        {
+            ConnectionMode = ConnectionModeCloud;
+        }
+
+        // 本地服务器模式的基地址不能为空：空值会让工厂在构造期抛异常，
+        // 而 App.OnStartup 的异常 WPF 兜不住 —— 表现为「重启即崩，且崩在设置页之前，
+        // 没法自救」。这里自愈掉，让用户还能进设置页改。
+        if (string.IsNullOrWhiteSpace(BaseUrl))
+        {
+            BaseUrl = "https://127.0.0.1/diandian/proxy";
+        }
+
+        // 自定义端点的 base URL 为空时不致命（模型选回非 custom 就不走它），
+        // 但不能是解析不了的地址 —— 构造期抛异常会让启动崩掉（WPF 兜不住启动期异常）。
+        // 自愈方式：把模型从「自定义」退回方舟默认，这样用户还能正常用。
+        if (IsCustomModel && !Uri.TryCreate(CustomBaseUrl, UriKind.Absolute, out _))
+        {
+            Model = "doubao-seed-2-1-pro-260915";
+        }
+
         return this;
     }
 
