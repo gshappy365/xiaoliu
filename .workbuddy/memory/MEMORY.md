@@ -17,6 +17,18 @@
   potepo 的三项独有价值已逐项并入主线：未处理异常弹窗（进 `App.xaml.cs`）、`scripts/run-server.sh`
   （明文 8899 开发服务器）、数据目录隔离（**判定不需要**）。
 
+## 仓库与 PR 布局（GitHub: `gshappy365/xiaoliu`）
+
+- 远程：`ssh://git@ssh.github.com:443/gshappy365/xiaoliu.git`（**SSH 走 443 端口**，不是标准 22）。
+- **PR #3** = ADR 0011 云直连，head = `agent/standalone-client-refactor-bbf378d95476`（`23f9ea0`），base = `main`。
+  → https://github.com/gshappy365/xiaoliu/pull/3
+- **PR #4** = ADR 0012 双连接模式，head = `feature/dual-connection`（`cdd18ed`），
+  base = **PR #3 的分支**（叠层 PR）→ https://github.com/gshappy365/xiaoliu/pull/4
+  - 差异：21 文件 / +2073 −74，正好是 ADR 0012 那 5 个提交。
+  - ⚠️ **合并顺序：先合 PR #3，再合 PR #4**（base 是 PR #3 的分支，PR #3 合并后 GitHub 会自动改写 base）。
+- `gh` CLI 在 `/c/Users/李平/bin/gh`（不在系统 PATH 里）。
+- 本地 `main`（`4d01150`）已被远程 `main`（`c221ac6`）超越 —— 远端含 PR #2 的合并，本地 main 未更新。
+
 ## 关键约定
 
 ### 双连接模式（ADR 0012，当前架构）
