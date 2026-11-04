@@ -54,6 +54,11 @@
   手工 `new AppSettings()` 的实例 `SourcePath` 为空 → **不写任何文件**。
   → 单测不再污染真实用户配置。改 `Save`/`Load` 相关代码时务必保住这个不变量。
 - `Normalize()` 自愈：未知模式兜回 cloud、空 BaseUrl 补默认值、custom + 非法 URL 退回方舟模型（修 B2）。
+- **⚠️ 本机 xiaoliu 从来没配过方舟密钥**（2026-11-04 实测）：两份配置备份里 `ArkApiKey` 都是空串，
+  `VoiceAppId` / `VoiceAccessToken` 也是空。→ 这台机器上 xiaoliu 实际一直在走 **local-server 模式**
+  （`BaseUrl=https://127.0.0.1/diandian/proxy` + `AccessToken=selfhost` + `AllowUntrustedTls=true`）。
+  要切 `cloud` 模式必须先在设置页填方舟 Key，否则首次对话必然鉴权失败。
+  → 恢复配置时默认模式应当是 `local-server`，不是 `cloud`。
 
 ## 本机执行要点（Windows）
 
