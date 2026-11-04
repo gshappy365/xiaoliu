@@ -123,7 +123,7 @@ public sealed class ToolDispatcher
             return call.Name switch
             {
                 ToolCatalog.CaptureScreen => _settings.AllowAutonomousCapture
-                    ? CaptureScreen(call)
+                    ? ModelCanSeeImages() ? CaptureScreen(call) : RejectCaptureForTextModel(call)
                     : RejectCapture(call),
                 ToolCatalog.PointAtScreen or ToolCatalog.HighlightRegion
                     or ToolCatalog.ConnectRegions or ToolCatalog.DemonstrateDrag => ExecuteGuidance(call, args),
@@ -255,6 +255,18 @@ public sealed class ToolDispatcher
         return Rejected(call, "capture_not_user_initiated", message, recovery: "stop",
             nextStep: "不要再次调用 capture_screen。有图就用图；没有图就请用户圈选后重问，或如实说明看不到屏幕。");
     }
+
+    /// <summary>云直连后没有服务端 VL 转述兜底（ADR 0011）：纯文本模型看不了图，抓屏只会浪费一轮。</summary>
+    private JsonObject RejectCaptureForTextModel(ToolUseCall call)
+    {
+        return Rejected(call, "capture_model_cannot_see",
+            "当前对话模型是纯文本模型，看不了抓来的图，此操作没有意义。",
+            recovery: "stop",
+            nextStep: "改用文字回答。确实需要看屏幕时，请用户在设置 → 模型服务里换一个「能看懂截屏」的模型。");
+    }
+
+    private bool ModelCanSeeImages() =>
+        _settings.IsCustomModel || ModelCatalog.Find(_settings.Model)?.Vision == true;
 
     // ---------------------------------------------------------------- 指点
 

@@ -28,14 +28,14 @@ public sealed class ConversationAgent
 
     private const int MaxHistoryExchanges = 10;
 
-    private readonly ChatClient _chat;
+    private readonly IChatTransport _chat;
     private readonly AppSettings _settings;
     private readonly ToolDispatcher _dispatcher;
     private readonly VisualEvidence _evidence;
     private readonly List<Exchange> _history = new();
 
     public ConversationAgent(
-        ChatClient chat,
+        IChatTransport chat,
         AppSettings settings,
         ToolDispatcher dispatcher,
         VisualEvidence evidence)
@@ -59,6 +59,17 @@ public sealed class ConversationAgent
         IReadOnlyDictionary<string, string>? runtimeContext,
         CancellationToken cancellationToken)
     {
+        // 云直连后没有服务端 VL 转述兜底（ADR 0011）：纯文本模型拿到图块只能干瞪眼。
+        // 提前拦下，直接给用户一句明确的换模型提示，不烧上游往返。
+        if (_evidence.Shots.Count > 0 && !IsVisionCapable())
+        {
+            var notice = "这一轮带的截图我看不了：当前模型是纯文本模型。"
+                         + "请到设置 → 模型服务里换一个「能看懂截屏」的模型再问一次。";
+            TextUpdated?.Invoke(notice);
+            return new AgentTurnResult(notice, "vision_unavailable", 0, 0,
+                _evidence.Shots.Select(shot => shot.Image).ToList());
+        }
+
         _dispatcher.ResetTurn();
 
         var messages = BuildHistoryPrefix();
@@ -89,15 +100,12 @@ public sealed class ConversationAgent
             var allowTools = calls < _settings.MaxToolCallsPerTurn;
             var request = new ChatRequest
             {
-                Model = _settings.Model,
+                Model = _settings.UpstreamModel,
                 System = SystemPrompt.For(_settings.AllowAutonomousCapture),
                 Messages = (JsonArray)messages.DeepClone(),
                 Tools = allowTools ? ToolCatalog.All : null,
                 MaxTokens = allowTools ? _settings.MaxTokensWithTools : _settings.MaxTokensWithoutTools,
                 ReasoningEffort = _settings.ReasoningEffort,
-                // 视觉组模型自己会看图，让服务端把图片原样透传（省一次 3.4s 的 VL 描述）。
-                // 纯文本模型仍然要服务端先转成文字，否则它拿到的是自己看不见的图片块。
-                VisionCapable = ModelCatalog.Find(_settings.Model)?.Vision ?? false,
             };
 
             requests++;
@@ -196,6 +204,9 @@ public sealed class ConversationAgent
         Remember(userText, finalText);
         return new AgentTurnResult(finalText, stopReason, requests, calls, screenshots);
     }
+
+    private bool IsVisionCapable() =>
+        _settings.IsCustomModel || ModelCatalog.Find(_settings.Model)?.Vision == true;
 
     private void Remember(string question, string answer)
     {

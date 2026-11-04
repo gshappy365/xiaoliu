@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -9,39 +8,56 @@ using Xiaoliu.Core.Tools;
 namespace Xiaoliu.Core.Protocol;
 
 /// <summary>
-/// <c>POST {base}/chat</c> 的流式客户端。
-///
-/// 请求体字段照抄点点 <c>ModelStreamingClient.BuildRequestBody</c>：
-/// model / max_tokens / stream / system / messages / main_reasoning_effort / tools / diandian_credits。
-/// 自建服务器不校验 diandian_credits，但保留字段形状，方便将来接回真实上游。
+/// 对话传输的接缝。一轮 = 一次流式请求，吐出 Anthropic 形状的
+/// <see cref="ChatRoundResult"/>（content 块 + tool_use + stop_reason），
+/// 上游是什么协议由实现类翻译。Agent 只跟这个接口说话（ADR 0011）。
 /// </summary>
-public sealed class ChatClient : IDisposable
+public interface IChatTransport
 {
-    private readonly HttpClient _http;
-    private readonly AppSettings _settings;
+    Task<ChatRoundResult> StreamAsync(
+        ChatRequest request,
+        Action<string>? onAccumulatedText,
+        CancellationToken cancellationToken);
+}
 
-    public ChatClient(AppSettings settings, HttpMessageHandler? handler = null)
+/// <summary>
+/// 按设置挑传输实现：模型是 <see cref="AppSettings.CustomModelKey"/> 时走自定义
+/// OpenAI 兼容端点，否则走火山方舟的 Anthropic 兼容端点。
+/// </summary>
+public static class ChatTransportFactory
+{
+    public static IChatTransport Create(AppSettings settings)
     {
-        _settings = settings;
-        _http = handler is null ? new HttpClient(CreateHandler(settings)) : new HttpClient(handler);
-        _http.Timeout = TimeSpan.FromMinutes(5);
-    }
-
-    public static HttpMessageHandler CreateHandler(AppSettings settings)
-    {
-        var handler = new SocketsHttpHandler
+        if (settings.IsCustomModel)
         {
-            ConnectTimeout = TimeSpan.FromSeconds(10),
-            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
-        };
-
-        if (settings.AllowUntrustedTls)
-        {
-            // v1 直连 127.0.0.1，自签证书的 SAN 是 botlearn 域名，主机名校验必然失败。
-            handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+            return new OpenAiChatClient(
+                settings.CustomBaseUrl,
+                settings.CustomApiKeyPlain ?? string.Empty,
+                settings.UpstreamModel);
         }
 
-        return handler;
+        return new ArkChatClient(settings.ArkApiKeyPlain ?? string.Empty);
+    }
+}
+
+/// <summary>
+/// 火山方舟 Anthropic 兼容端点的直连客户端（ADR 0011）。
+///
+/// 请求体就是 Anthropic Messages：model / max_tokens / stream / system / messages / thinking / tools。
+/// 曾经借道自建服务器的私有字段（<c>main_reasoning_effort</c>、<c>vision_capable</c>、
+/// <c>diandian_credits</c>）全部不再发送 —— 前者换成协议原生的 <c>thinking</c> 预算，
+/// 后两者服务的功能（VL 转述、路由）在客户端侧已被 ADR 0011 取消。
+/// </summary>
+public sealed class ArkChatClient : IChatTransport, IDisposable
+{
+    private readonly HttpClient _http;
+
+    public ArkChatClient(string apiKey, HttpMessageHandler? handler = null)
+    {
+        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        _http.Timeout = TimeSpan.FromMinutes(5);
+        _http.DefaultRequestHeaders.TryAddWithoutValidation(WireProtocol.AuthorizationHeader, "Bearer " + apiKey);
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("anthropic-version", "2023-06-01");
     }
 
     public async Task<ChatRoundResult> StreamAsync(
@@ -49,12 +65,10 @@ public sealed class ChatClient : IDisposable
         Action<string>? onAccumulatedText,
         CancellationToken cancellationToken)
     {
-        using var message = new HttpRequestMessage(HttpMethod.Post, WireProtocol.HttpUri(_settings.BaseUri, WireProtocol.ChatPath))
+        using var message = new HttpRequestMessage(HttpMethod.Post, WireProtocol.ArkAnthropicEndpoint)
         {
             Content = new StringContent(BuildBody(request), Encoding.UTF8, "application/json"),
         };
-        message.Headers.TryAddWithoutValidation(WireProtocol.AuthorizationHeader, "Bearer " + _settings.AccessToken);
-        message.Headers.TryAddWithoutValidation(WireProtocol.ClientBuildHeader, WireProtocol.ClientBuild);
 
         using var response = await _http.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -91,6 +105,17 @@ public sealed class ChatClient : IDisposable
         return accumulator.Build();
     }
 
+    /// <summary>
+    /// 推理强度映射成 Anthropic 原生 <c>thinking</c> 预算：low=1024、medium=4096、high=8191。
+    /// 协议要求预算严格小于 max_tokens，不够就把 max_tokens 抬到预算 +1024（它是上限不是目标长度）。
+    /// </summary>
+    public static int ThinkingBudget(string? effort) => effort switch
+    {
+        "low" => 1024,
+        "high" => 8191,
+        _ => 4096,
+    };
+
     public static string BuildBody(ChatRequest request)
     {
         var body = new JsonObject
@@ -104,15 +129,17 @@ public sealed class ChatClient : IDisposable
 
         if (!string.IsNullOrEmpty(request.ReasoningEffort))
         {
-            body["main_reasoning_effort"] = request.ReasoningEffort;
-        }
+            var budget = ThinkingBudget(request.ReasoningEffort);
+            if (budget >= request.MaxTokens)
+            {
+                body["max_tokens"] = budget + 1024;
+            }
 
-        // 只在「当前模型自己能看图」时发。服务端据此把图片块原样透传，
-        // 不再跑 VL 描述 / OCR —— 那是给纯文本上游准备的前处理。
-        // 不发的效果和不支持视觉一样（照旧转文本），所以点点那条链路不受影响。
-        if (request.VisionCapable)
-        {
-            body["vision_capable"] = true;
+            body["thinking"] = new JsonObject
+            {
+                ["type"] = "enabled",
+                ["budget_tokens"] = budget,
+            };
         }
 
         if (request.Tools is { Count: > 0 })
@@ -145,12 +172,6 @@ public sealed class ChatRequest
     public IReadOnlyList<ToolDefinition>? Tools { get; init; }
     public int MaxTokens { get; init; } = 8192;
     public string? ReasoningEffort { get; init; }
-
-    /// <summary>
-    /// 当前对话模型自己能看图（<see cref="ModelCatalog"/> 里的 Vision 组）。
-    /// 为 true 时服务端直连透传图片；为 false 时服务端先转成文字再发。
-    /// </summary>
-    public bool VisionCapable { get; init; }
 }
 
 public sealed class ChatHttpException(HttpStatusCode status, string body)

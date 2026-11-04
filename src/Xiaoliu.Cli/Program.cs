@@ -54,19 +54,20 @@ internal static class Program
     private static void PrintUsage()
     {
         Console.WriteLine("""
-            xiaoliu-cli —— 线协议联调台
+            xiaoliu-cli —— 云直连联调台（ADR 0011，不再有服务器）
 
-              health                          读 /healthz 与 /capabilities
+              health                          检查凭证与上游连通（真实往返一次）
               chat "问题" [--tools] [--image 路径] [--model id]
                                               走一轮对话（--image 模拟用户圈选，
                                               --model 只在内存里换模型，不写回配置）
-              asr 文件.wav                    把 16k/16bit 单声道 wav 送进 ASR 中继
-              tts "文字" [--out 文件.wav]      合成并落盘
+              asr 文件.wav                    把 16k/16bit 单声道 wav 直连火山 ASR
+              tts "文字" [--out 文件.wav]      直连火山 TTS 合成并落盘
               tools                           打印本轮声明的 14 个工具
               windows [过滤词] [--hidden]      列出顶层窗口（句柄、进程、位置、可见性）
               type "窗口标题" "文本"            把文字打进那个窗口（先抢前台）
 
             配置：%LOCALAPPDATA%\xiaoliu\settings.json（不存在则用默认值）
+            密钥：方舟 key / 火山语音凭证，设置页 → 模型服务 里填，DPAPI 加密落盘
             """);
     }
 
@@ -79,22 +80,41 @@ internal static class Program
 
     private static async Task<int> HealthAsync(AppSettings settings)
     {
-        using var client = new HttpClient(ChatClient.CreateHandler(settings)) { Timeout = TimeSpan.FromSeconds(10) };
-        var health = await client.GetStringAsync(WireProtocol.HttpUri(settings.BaseUri, WireProtocol.HealthPath));
-        Console.WriteLine($"health  {WireProtocol.HttpUri(settings.BaseUri, WireProtocol.HealthPath)}");
-        Console.WriteLine(Pretty(health));
+        Console.WriteLine($"对话模型：{settings.Model}" + (settings.IsCustomModel ? $"（自定义端点 {settings.CustomBaseUrl}，模型 {settings.CustomModelName}）" : "（火山方舟）"));
+        Console.WriteLine($"端点：{WireProtocol.ArkAnthropicEndpoint}");
+        Console.WriteLine($"语音：{WireProtocol.AsrWebSocketUrl}");
+        Console.WriteLine($"方舟 key：{(string.IsNullOrEmpty(settings.ArkApiKey) ? "未配置" : "已配置")}");
+        Console.WriteLine($"火山语音凭证：{(string.IsNullOrEmpty(settings.VoiceAppId) ? "未配置" : "已配置")}");
 
-        try
+        // 真实往返一次：max_tokens=1 的非流式请求，既验证网络也验证鉴权，花费忽略不计。
+        var isCustom = settings.IsCustomModel;
+        var model = settings.UpstreamModel;
+        var url = isCustom ? OpenAiChatClient.BuildEndpoint(settings.CustomBaseUrl) : WireProtocol.ArkAnthropicEndpoint;
+        var key = (isCustom ? settings.CustomApiKeyPlain : settings.ArkApiKeyPlain)
+                  ?? throw new InvalidOperationException("密钥解不开（换机器后需重填），请到设置 → 模型服务重新填写。");
+        var body = new JsonObject
         {
-            var capabilities = await client.GetStringAsync(WireProtocol.HttpUri(settings.BaseUri, WireProtocol.CapabilitiesPath));
-            Console.WriteLine($"capabilities  {capabilities.Length} 字节");
-        }
-        catch (HttpRequestException ex)
+            ["model"] = model,
+            ["max_tokens"] = 1,
+            ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = "ping" }),
+        };
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        using var message = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Console.WriteLine($"capabilities 取不到：{ex.Message}");
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        message.Headers.TryAddWithoutValidation(WireProtocol.AuthorizationHeader, "Bearer " + key);
+        if (!isCustom)
+        {
+            message.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
         }
 
-        return 0;
+        using var response = await client.SendAsync(message);
+        var text = await response.Content.ReadAsStringAsync();
+        Console.WriteLine($"连通测试 {url} → HTTP {(int)response.StatusCode}");
+        Console.WriteLine(Pretty(text.Length > 400 ? text[..400] + "…" : text));
+        return response.IsSuccessStatusCode ? 0 : 2;
     }
 
     private static async Task<int> ChatAsync(AppSettings settings, string[] args)
@@ -165,7 +185,8 @@ internal static class Program
             Console.WriteLine("[提示] 未加 --tools：本轮不声明工具，模型只能直接回答。");
         }
 
-        using var chat = new ChatClient(settings);
+        var chat = ChatTransportFactory.Create(settings);
+        using var chatDisposable = chat as IDisposable;
         var agent = new ConversationAgent(chat, settings, dispatcher, evidence);
         var stopwatch = Stopwatch.StartNew();
         var firstToken = -1L;
@@ -199,10 +220,12 @@ internal static class Program
         }
 
         var (pcm, sampleRate) = ReadWav(args[0]);
-        var uri = WireProtocol.WebSocketUri(settings.BaseUri, WireProtocol.AsrPath);
-        Console.WriteLine($"asr  {uri}  {pcm.Length / 2 / sampleRate:F2}s @ {sampleRate}Hz");
+        Console.WriteLine($"asr  {WireProtocol.AsrWebSocketUrl}  {pcm.Length / 2 / sampleRate:F2}s @ {sampleRate}Hz");
 
-        await using var session = await AsrSession.ConnectAsync(uri, sampleRate, CancellationToken.None, settings.AllowUntrustedTls);
+        await using var session = await AsrSession.ConnectAsync(
+            settings.VoiceAppIdPlain ?? string.Empty,
+            settings.VoiceAccessTokenPlain ?? string.Empty,
+            sampleRate, CancellationToken.None);
         session.PartialReceived += text => Console.WriteLine($"[partial] {text}");
 
         // 按 100ms 一帧推，模拟麦克风节奏。
@@ -228,12 +251,14 @@ internal static class Program
             return 1;
         }
 
-        var uri = WireProtocol.WebSocketUri(settings.BaseUri, WireProtocol.TtsPath);
         var stopwatch = Stopwatch.StartNew();
         var pcm = new MemoryStream();
         long firstFrame = -1;
 
-        await using var session = await TtsSession.ConnectAsync(uri, settings.TtsVoiceId, CancellationToken.None, settings.AllowUntrustedTls);
+        await using var session = await TtsSession.ConnectAsync(
+            settings.VoiceAppIdPlain ?? string.Empty,
+            settings.VoiceAccessTokenPlain ?? string.Empty,
+            settings.TtsVoiceId, CancellationToken.None);
         session.AudioReceived += bytes =>
         {
             if (firstFrame < 0)
