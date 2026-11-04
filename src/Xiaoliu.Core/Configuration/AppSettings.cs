@@ -173,6 +173,9 @@ public sealed class AppSettings
                 var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOptions);
                 if (loaded is not null)
                 {
+                    // 记住来源路径：Save() 无参时写回同一个文件，
+                    // 而不是「谁 new 出来的就往默认目录写」。
+                    loaded.SourcePath = path;
                     return loaded.Normalize();
                 }
             }
@@ -182,14 +185,43 @@ public sealed class AppSettings
             // 配置坏了不能拖死启动：落回默认值，下一次保存会覆盖。
         }
 
-        return new AppSettings();
+        // 文件不存在时也要记住路径：用户第一次改设置时得能存下去。
+        // 注意与「测试里 new 出来的实例」区分 —— 那种 SourcePath 是 null，Save 不写。
+        var fresh = new AppSettings { SourcePath = path };
+        return fresh.Normalize();
     }
 
+    /// <summary>
+    /// 这个配置是从哪个文件读出来的。<see cref="Save"/> 无参时写回它。
+    ///
+    /// 为什么需要它：`Save()` 无参曾经直接写默认目录，于是**测试里 new 出来的
+    /// AppSettings 一调 Save 就把用户真实配置覆盖成默认值**（实测：
+    /// ToolPolicyTests 触发 update_setting → Save() → 用户配置的
+    /// Model/ImageRetentionDays 被抹掉）。这不是本 PR 引入的，但 ADR 0012
+    /// 恢复 BaseUrl/AccessToken 后破坏面更大 —— 旧字段会被静默丢弃。
+    ///
+    /// 现在只有从文件加载出来的配置才知道往哪儿写；手工 new 出来的必须显式给路径。
+    /// </summary>
+    [JsonIgnore]
+    public string? SourcePath { get; internal set; }
+
+    /// <summary>
+    /// 写回配置。<paramref name="path"/> 为空时写回 <see cref="SourcePath"/>；
+    /// 两者都没有就**不写**（防止误覆盖用户真实配置）。
+    /// </summary>
     public void Save(string? path = null)
     {
-        path ??= DefaultPath;
+        path ??= SourcePath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            // 没有明确目标路径就不写。调用方（App、ToolDispatcher）都是从
+            // Load() 拿到的配置，SourcePath 一定有值。
+            return;
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
+        SourcePath = path;
     }
 
     public AppSettings Normalize()

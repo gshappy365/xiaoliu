@@ -252,4 +252,87 @@ public sealed class DualConnectionTests
             "https://127.0.0.1/diandian/proxy/chat",
             WireProtocol.HttpUri(settings.ServerBaseUri, WireProtocol.ChatPath).ToString());
     }
+
+    // ------------------------------------------------------------- 配置隔离
+
+    [Fact]
+    public void 手工new的配置_保存不写任何文件()
+    {
+        // 测试里 new 出来的 AppSettings 一调 Save 就把用户真实配置覆盖成默认值 ——
+        // 实测 ToolPolicyTests 触发 update_setting → Save() → 用户配置的
+        // Model/ImageRetentionDays 被抹掉。现在没有明确路径就不写。
+        var settings = new AppSettings { Model = "SENTINEL" };
+        var tempDir = Path.Combine(Path.GetTempPath(), "xiaoliu-save-probe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var probe = Path.Combine(tempDir, "settings.json");
+        try
+        {
+            settings.Save();
+            Assert.False(File.Exists(probe));
+
+            // 显式给路径才写
+            settings.Save(probe);
+            Assert.True(File.Exists(probe));
+            Assert.Contains("SENTINEL", File.ReadAllText(probe));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void 从文件加载的配置_保存写回原路径()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "xiaoliu-load-probe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var path = Path.Combine(tempDir, "settings.json");
+        try
+        {
+            File.WriteAllText(path, """{ "Model": "SENTINEL-FROM-FILE" }""");
+            var loaded = AppSettings.Load(path);
+
+            loaded.Model = "CHANGED";
+            loaded.Save();
+
+            var written = File.ReadAllText(path);
+            Assert.Contains("CHANGED", written);
+            Assert.Equal(path, loaded.SourcePath);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void 文件不存在时加载_也能记住路径以便首次保存()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "xiaoliu-fresh-probe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var path = Path.Combine(tempDir, "settings.json");
+        try
+        {
+            var loaded = AppSettings.Load(path);
+            Assert.Equal(path, loaded.SourcePath);
+
+            loaded.Model = "FIRST-SAVE";
+            loaded.Save();
+            Assert.True(File.Exists(path));
+            Assert.Contains("FIRST-SAVE", File.ReadAllText(path));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
 }
