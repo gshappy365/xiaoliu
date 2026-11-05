@@ -8,7 +8,8 @@ public sealed record ToolDefinition(string Name, string Description, string Inpu
 
 /// <summary>
 /// 14 个工具的声明。描述与 schema 尽量照抄点点
-/// （D:\gao\wbai\diandian-reference\tools-from-diandian.json，该文件已移出本仓库），
+/// （点点反编译源码目录下的 tools-from-diandian.json，该目录已移出本仓库，
+/// 位置见 reference/README.md），
 /// 因为模型对这套措辞已经调过参；改动措辞会改变工具命中率，不是「优化文案」。
 ///
 /// 排除的 5 个（课程三件套 + 技能两件套）不声明、收到即 rejected，

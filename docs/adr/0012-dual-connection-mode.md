@@ -147,9 +147,10 @@ DPAPI(CurrentUser)（`SecretProtector`）。`AccessToken` 是本地服务器的�
 - **排障要分清是哪条链路**：客户端日志打出当前模式，服务端日志记录
   `X-DianDian-Client-Build`（点点不带头、xiaoliu 带头），否则
   「方舟 401」和「服务器 502」会混在一起看。
-- **开发通道独立**：`scripts/run-server.sh` 让服务器端起在明文 8899，
+- **开发通道独立**：服务器端用 `TLS=0 PORT=8899 bash start-real.sh` 起明文实例，
   不占 443、不动点点的 hosts/TLS 测试床。点点走 443，xiaoliu 走 8899，
-  开发时两边能同时跑。
+  开发时两边能同时跑。这个开关在**服务器端项目**里，本仓库不携带任何服务器启动器
+  （理由见 ADR 0013）。
 
 ## 三副本收敛
 
@@ -167,4 +168,7 @@ DPAPI(CurrentUser)（`SecretProtector`）。`AccessToken` 是本地服务器的�
   （按日分文件、带堆栈），只把**错误弹窗**并入主线 —— 静默失败比崩溃更难查。
 - **数据目录隔离**（`%LOCALAPPDATA%\potepo`）：主线统一用
   `%LOCALAPPDATA%\xiaoliu`，双线共目录的问题已不存在，不需要。
-- **`scripts/run-server.sh`**：并入主线，作为解耦后的独立开发通道（见上）。
+- **`scripts/run-server.sh`**：**不入主线**（见 ADR 0013）。它为了开明文端口，
+  只能 `eval` 服务器端的 export 段，于是反过来对本仓库产生硬编码绝对路径依赖
+  （`D:/gao/wbai/rea/...`）。改法是让服务器端启动器自己支持明文模式，
+  本仓库不必再养第二个启动器。
