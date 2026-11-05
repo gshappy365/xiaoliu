@@ -16,6 +16,33 @@
   → 代码主线统一到 `mattpocock`，分支 `feature/dual-connection`。
   potepo 的三项独有价值已逐项并入主线：未处理异常弹窗（进 `App.xaml.cs`）、`scripts/run-server.sh`
   （明文 8899 开发服务器）、数据目录隔离（**判定不需要**）。
+- **点点反编译源码已移出小六仓库**（2026-11-05）→ 独立目录 `D:\gao\wbai\diandian-reference\`
+  （766 文件 / 4.6MB：App 层 145 + Core 层 620 + 2 个 json + 2 个 txt）。
+  小六仓库里 `reference/` **只剩一个指针 README**（入库）；`.gitignore` 改成
+  `reference/*` + `!reference/README.md` —— 只放行这一个文件，从机制上杜绝闭源误提交。
+  该目录**只读**，随时可能被重新反编译覆盖。
+
+## 目录解耦现状（2026-11-05 盘点）
+
+**已解耦：**
+- 点点反编译源码 ↔ 小六仓库 → 独立目录 `D:\gao\wbai\diandian-reference\`。
+  仓库内只剩 `reference/README.md` 指针；`README.md` 结构说明、`ToolCatalog.cs` 注释、
+  `rea/CONTEXT.md` 术语表都已指向新位置。
+  另两个副本（`xiaoliu-dsh` / `potepo`）本来就没有 `reference/`，无需处理。
+
+**尚未解耦（用户本轮明确只做第一项，其余保留）：**
+
+| # | 耦合 | 位置 | 备注 |
+|---|---|---|---|
+| C2 | 小六仓库的脚本反向依赖 rea 绝对路径 | `scripts/run-server.sh`：`SERVER_DIR=D:/gao/wbai/rea/server`、`ROOT=D:/gao/wbai/rea`，并 `eval` rea 的 `start-real.sh` | **已入库 → 在 PR #4 里**。本质是服务器侧启动器放错了仓库 |
+| C3 | 部署目录把服务器与客户端混装 | `D:\gao\wbai\xiaoliu\`：`start-server.bat`→rea、`watchdog.ps1`/`watchdog_host.py`/`launch_hidden.py`→rea、`server-console.log`，但也有 `start-xiaoliu.bat`→小六客户端 | 一个目录两个项目 |
+| C4 | 文档用绝对路径交叉引用 | `CONTEXT.md:5`、`docs/adr/0008:18`、`docs/adr/0012` 多处指向 `D:\gao\wbai\rea\...` | 文档级 |
+| C5 | 计划任务名误导 | `xiaoliu-server` / `xiaoliu-server-watchdog` 跑的其实是**点点的服务器**（rea），却挂着「小六」前缀 | 改名要重建计划任务，有中断风险 |
+| — | 点点反编译源码仍在 rea 项目内 | `rea/decompiled/`(84 .cs) 与 `rea/decompiled-089/`(37 .cs) | 属服务器端项目的产物，`rea/reports/` 大量引用，搬迁要连带改报告 |
+
+**搬动前必查的三件事（本次都查了）**：csproj 是否 glob 该目录（否）、
+仓库内有几处引用（2 处）、其他副本是否有重复副本（无）。
+→ 通用规律：**跨目录搬代码前先查 csproj 的 glob 与引用点**，否则构建会静默崩。
 
 ## 仓库与 PR 布局（GitHub: `gshappy365/xiaoliu`）
 

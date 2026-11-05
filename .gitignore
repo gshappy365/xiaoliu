@@ -1,5 +1,8 @@
 # 反编译产物：闭源代码不进版本库
-reference/
+# 点点的反编译源码已于 2026-11-05 移出本仓库，改放独立目录，
+# 位置与说明见 reference/README.md（该文件本身入库）。
+reference/*
+!reference/README.md
 artifacts/
 *.user
 *.suo

@@ -12,7 +12,7 @@ src/Xiaoliu.App/      WPF 常驻客户端：托盘 + 胶囊 + 字幕条 + 指点
 src/Xiaoliu.Cli/      无界面联调台，用来证明协议层通了
 tests/                单元测试（SSE 分帧、工具策略、留存、内容指纹）
 docs/adr/             客户端级决策
-reference/            点点的反编译产物（.gitignore，不入库）
+reference/            只剩一个指针 README：点点的反编译源码已移出仓库（闭源，见该 README）
 ```
 
 ## 构建与运行
