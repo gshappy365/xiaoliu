@@ -1,5 +1,8 @@
 # 目录解耦：把点点的闭源源码与服务器启动器搬出 xiaoliu 仓库
 
+> 本文里的外部项目路径用逻辑名（`rea/`、`diandian-reference/`、`wbai/` 等），
+> 对照表见 `docs/workspace-layout.md`。
+
 ## Context
 
 ADR 0012 解开了**运行时**耦合：三套工程各走各的链路，互不绑架。
@@ -8,7 +11,7 @@ ADR 0012 解开了**运行时**耦合：三套工程各走各的链路，互不�
 | # | 耦合 | 具体表现 |
 |---|---|---|
 | C1 | 点点的闭源源码住在 xiaoliu 仓库里 | `reference/App/Diandian.Windows.App/`（145 文件）+ `reference/Core/`（620 文件），共 766 文件 4.6MB |
-| C2 | xiaoliu 仓库的脚本反向依赖服务器端的绝对路径 | `scripts/run-server.sh` 硬编码 `SERVER_DIR=D:/gao/wbai/rea/server`、`ROOT=D:/gao/wbai/rea`，并 `eval` 服务器端 `start-real.sh` 的 export 段 |
+| C2 | xiaoliu 仓库的脚本反向依赖服务器端的绝对路径 | `scripts/run-server.sh` 硬编码 `SERVER_DIR=<rea>/server`、`ROOT=<rea>`，并 `eval` 服务器端 `start-real.sh` 的 export 段 |
 
 C1 的问题不只是难看。点点是**闭源商业产品**，它的反编译源码放在一个公开的
 GitHub 仓库里，靠 `.gitignore` 里的 `reference/` 一行挡着 —— 只要有人改了 ignore 规则，
@@ -24,7 +27,7 @@ C2 的问题更隐蔽：为了开一个明文端口，需要复用服务器端�
 ### 1. 点点的反编译源码搬出仓库，独立成目录
 
 ```
-D:\gao\wbai\diandian-reference\     766 文件 / 4.6MB，点点客户端 App + Core 全量
+diandian-reference/     766 文件 / 4.6MB，点点客户端 App + Core 全量
 ```
 
 位置选在 `wbai/` 下与服务器端项目 `rea/` 并列：同属点点生态，但不寄生在任何客户端项目里。
@@ -69,7 +72,7 @@ reference/*
 
 ## Considered Options
 
-**点点源码放 `D:\gao\wbai\rea\decompiled-full\`？** 不选。
+**点点源码放 `rea/decompiled-full/`？** 不选。
 那会把客户端的闭源源码挂到**服务器端项目**下 —— 只是把耦合从客户端挪到服务器，
 而且 `rea/` 的身份是「替 botlearn 云的服务器端」，装客户端源码名不副实。
 
@@ -110,7 +113,7 @@ reference/*
 
 | # | 耦合 | 位置 |
 |---|---|---|
-| C4 | 文档用绝对路径交叉引用 | `CONTEXT.md`、`docs/adr/0008` 等多处指向 `D:\gao\wbai\rea\...` |
+| C4 | 文档用绝对路径交叉引用 | `CONTEXT.md`、`docs/adr/0008` 等多处指向 `rea/` 的绝对路径 —— 已由 ADR 0014 处理 |
 | C5 | 计划任务名误导 | `xiaoliu-server` / `xiaoliu-server-watchdog` 跑的其实是点点的服务器，却挂着「小六」前缀 |
 
 ---
@@ -118,16 +121,16 @@ reference/*
 ## C3：拆分部署目录（2026-11-05 第二阶段）
 
 C1 把闭源源码搬出仓库，C2 把服务器启动器搬回服务器项目，**C3 处理最后一个**：
-`D:\gao\wbai\xiaoliu\` 这一个目录同时装着点点的服务端运维脚本和小六客户端的启动器。
+`wbai/xiaoliu/` 这一个目录同时装着点点的服务端运维脚本和小六客户端的启动器。
 
 ### 拆分结果
 
 | 新位置 | 装什么 | 归谁 |
 |---|---|---|
-| `D:\gao\wbai\diandian-server-ops\` | `launch_hidden.py`、`watchdog.ps1`、`watchdog_host.py`、`start-server.bat`、`check-proxy.sh` + 3 个日志 | 点点服务端（rea） |
-| `D:\gao\xiaoliu\deploy\` | `start-xiaoliu.bat`、`run-test.bat`、`xiaoliu-started.png` | 小六客户端 |
+| `diandian-server-ops/` | `launch_hidden.py`、`watchdog.ps1`、`watchdog_host.py`、`start-server.bat`、`check-proxy.sh` + 3 个日志 | 点点服务端（rea） |
+| `xiaoliu-deploy/` | `start-xiaoliu.bat`、`run-test.bat`、`xiaoliu-started.png` | 小六客户端 |
 
-原目录 `D:\gao\wbai\xiaoliu\` 的内容全部移出（进回收站 + `_backup-xiaoliu-deploy-20261105\` 全量备份）。
+原目录 `wbai/xiaoliu/` 的内容全部移出（进回收站 + `wbai/_backup-xiaoliu-deploy-20261105/` 全量备份）。
 
 ### 路径不再硬编码
 
@@ -179,7 +182,7 @@ UTF-8 写的中文注释会被误解码，进而产生
   本次重启后 5 秒 healthz 恢复 200，端到端对话正常（首字 1490ms）。
 - 计划任务**名**没改（`xiaoliu-server` 跑的仍是点点的服务端）—— 属 C5，
   改名要重建任务、有中断风险，不在本次范围
-- `D:\gao\wbai\xiaoliu\` 的**空目录壳删不掉**（被某进程持有句柄，
+- `wbai/xiaoliu/` 的**空目录壳删不掉**（被某进程持有句柄，
   `Directory.Delete` 报「正由另一进程使用」）。内容已全部移出，不影响功能。
   沙箱的 `genie-trash` 对**空目录**会报错但实际已删除（Windows 回收站 API 的已知限制）
 

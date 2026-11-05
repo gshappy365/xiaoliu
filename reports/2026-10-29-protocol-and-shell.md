@@ -1,6 +1,6 @@
 # v1 线协议层与常驻外壳：做到哪、怎么验的
 
-日期：2026-10-29　仓库：`D:\gao\xiaoliu\mattpocock`
+日期：2026-10-29　仓库：`xiaoliu-repo/`（路径对照见 `docs/workspace-layout.md`）
 
 ## 一句话
 

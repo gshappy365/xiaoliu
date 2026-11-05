@@ -2,7 +2,9 @@
 
 单机本地使用的 Windows 客户端（云直连，ADR 0011）。本文只记录客户端自己的术语，不记录实现。
 
-服务器端、点点、协议兼容这些历史术语见 `D:\gao\wbai\rea\CONTEXT.md`，不在这里重复。
+服务器端、点点、协议兼容这些历史术语见 `rea/CONTEXT.md`，不在这里重复。
+
+外部项目的路径记法见 `docs/workspace-layout.md`。
 
 ## Language
 

@@ -4,8 +4,10 @@
 
 ## 源码现在在哪
 
+逻辑路径 `diandian-reference/`（实际位置见 `docs/workspace-layout.md`）：
+
 ```
-D:\gao\wbai\diandian-reference\
+diandian-reference/
 ├── App/                      点点客户端 App 层反编译（17 个命名空间）
 │   └── Diandian.Windows.App/ 及 Audio / Authentication / Capture / Companion /
 │       Course / DesignSystem / Input / Interop / Overlay / Spike / Surface / Text / Update
@@ -33,9 +35,9 @@ D:\gao\wbai\diandian-reference\
 
 | 位置 | 内容 | 用途 |
 |---|---|---|
-| `D:\gao\wbai\diandian-reference\`（本目录原内容） | 点点客户端**完整**反编译（760 个 .cs） | 看点点怎么实现的 |
-| `D:\gao\wbai\rea\decompiled\` | 按主题裁剪（Capture / Companion / Core-Agent / Core-Text / Networking / Orchestrator / Voice，84 个 .cs） | 写服务器端时查协议细节 |
-| `D:\gao\wbai\rea\decompiled-089\` | 0.8.9 版差量（WorkBuddy / Metrics / Growth / Auth / Capture / System，37 个 .cs） | 查 0.8.9 相对 0.8.2 的变化 |
+| `diandian-reference/`（本目录原内容） | 点点客户端**完整**反编译（760 个 .cs） | 看点点怎么实现的 |
+| `rea/decompiled/` | 按主题裁剪（Capture / Companion / Core-Agent / Core-Text / Networking / Orchestrator / Voice，84 个 .cs） | 写服务器端时查协议细节 |
+| `rea/decompiled-089/` | 0.8.9 版差量（WorkBuddy / Metrics / Growth / Auth / Capture / System，37 个 .cs） | 查 0.8.9 相对 0.8.2 的变化 |
 
 `rea/` 下的两个目录属于**服务器端项目**的产物，报告里大量引用，暂不搬迁。
 本目录是**客户端侧的完整参考**，两者内容不重复。
@@ -43,11 +45,12 @@ D:\gao\wbai\diandian-reference\
 ## 用法
 
 只读参考，不要在这个目录里改代码 —— 它随时可能被重新反编译覆盖。
-要记笔记请写到 `D:\gao\wbai\rea\reports\` 或小六的 `docs/`。
+要记笔记请写到 `rea/reports/` 或小六的 `docs/`。
 
 ## 相关
 
 - 小六的工具声明照抄点点：`src/Xiaoliu.Core/Tools/ToolCatalog.cs` 的注释指向
-  `D:\gao\wbai\diandian-reference\tools-from-diandian.json`
-- 点点/服务器端的术语表在 `D:\gao\wbai\rea\CONTEXT.md`
+  `diandian-reference/tools-from-diandian.json`
+- 点点/服务器端的术语表在 `rea/CONTEXT.md`
 - 小六的术语表在仓库根目录 `CONTEXT.md`
+- 外部项目的路径记法见 `docs/workspace-layout.md`

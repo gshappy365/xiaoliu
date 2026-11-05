@@ -9,7 +9,7 @@ namespace Xiaoliu.Core.Protocol;
 ///
 /// 帧以空行结束（<c>\n\n</c>），网络分片可能把一帧切成两半，所以必须自己缓冲。
 /// 这不是通用 SSE 实现 —— 只保留 <c>event:</c> 与 <c>data:</c>，注释与 id 丢弃，
-/// 因为服务端只发这两种（见 rea/server/app/protocol.py）。
+/// 因为服务端只发这两种（见 rea/server/app/protocol.py，路径记法见 docs/workspace-layout.md）。
 /// </summary>
 public sealed class SseReader
 {

@@ -6,7 +6,8 @@ using System.Text.Json.Nodes;
 namespace Xiaoliu.Core.Voice;
 
 /// <summary>
-/// 语音中继的双 WebSocket。协议形状照抄点点抓包（见 rea/server/app/main.py 的两个 ws 端点）：
+/// 语音中继的双 WebSocket。协议形状照抄点点抓包（见 rea/server/app/main.py 的两个 ws 端点，
+/// 路径记法见 docs/workspace-layout.md）：
 ///
 /// ASR：up start → down ready → down partial*（累积文本）→ up finish → down final
 /// TTS：down connected → up start → down ready → up text* → up finish → down finished

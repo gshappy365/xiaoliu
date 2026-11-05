@@ -13,7 +13,7 @@ namespace Xiaoliu.Core.Protocol;
 ///
 /// 与 <see cref="ArkChatClient"/> 的差别只有三处，其余（SSE 解析、工具回环、
 /// 圈选图编码）完全共用 —— 因为服务器端的 chat 端点本身就是 Anthropic Messages
-/// 协议（见 rea/server/app/main.py）。
+/// 协议（见 rea/server/app/main.py，路径记法见 docs/workspace-layout.md）。
 ///
 /// <b>请求体里的私有字段是有意发的</b>：服务器端的 <c>rewrite_request</c> 读
 /// <c>main_reasoning_effort</c> 与 <c>vision_capable</c> 来决定上游的思考预算和

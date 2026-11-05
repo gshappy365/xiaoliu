@@ -15,10 +15,14 @@ Windows 单机客户端（ADR 0011 / 0012）：一个 exe，两种连接方式�
 src/Xiaoliu.Core/     云直连传输、工具与策略、取图、存储、语音直连（无 UI，可单测）
 src/Xiaoliu.App/      WPF 常驻客户端：托盘 + 胶囊 + 字幕条 + 指点层 + 圈选层 + 主工作区
 src/Xiaoliu.Cli/      无界面联调台，用来证明协议层通了
-tests/                单元测试（SSE 分帧、工具策略、留存、内容指纹）
+tests/                单元测试（SSE 分帧、工具策略、留存、内容指纹、路径卫生）
 docs/adr/             客户端级决策
+docs/workspace-layout.md  外部项目（服务器端、点点反编译等）的路径对照表
 reference/            只剩一个指针 README：点点的反编译源码已移出仓库（闭源，见该 README）
 ```
+
+本文与其它文档里引用仓库外的项目时，一律用**逻辑路径**（`rea/`、`diandian-reference/`），
+实际位置查 `docs/workspace-layout.md`。
 
 ## 构建与运行
 

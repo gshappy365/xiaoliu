@@ -8,7 +8,8 @@ namespace Xiaoliu.Core.Protocol;
 /// 把 Anthropic Messages SSE 帧拼回一轮完整响应（content 块 + stop_reason）。
 ///
 /// 只做「拼装」，不做业务判断：工具调用在哪一轮、要不要执行，是 Agent 的事。
-/// 帧顺序必须完整，否则带工具的请求会被上游判 malformed（rea/server/app/protocol.py 头部注释）。
+/// 帧顺序必须完整，否则带工具的请求会被上游判 malformed（rea/server/app/protocol.py 头部注释，
+/// 路径记法见 docs/workspace-layout.md）。
 /// </summary>
 public sealed class ChatStreamAccumulator
 {

@@ -9,7 +9,7 @@ namespace Xiaoliu.App;
 /// 而 RegisterHotKey 也不报告松手时刻。
 ///
 /// 副作用：合成输入（keybd_event / SendInput）进不了钩子链，所以自动化脚本测不出热键。
-/// 见 rea/reports/hotkey-diagnosis.md。
+/// 见 rea/reports/hotkey-diagnosis.md（路径记法见 docs/workspace-layout.md）。
 /// </summary>
 public sealed class HotkeyHook : IDisposable
 {

@@ -1,14 +1,17 @@
 # 三套工程解耦：xiaoliu 支持本地服务器与云直连双模式
 
+> 本文里的外部项目路径用逻辑名（`rea/`、`diandian-client/` 等），
+> 对照表见 `docs/workspace-layout.md`。
+
 ## Context
 
 本机同时跑着三套东西，它们今天靠「hosts 劫持 + 私有协议」耦在一起：
 
 | 工程 | 位置 | 角色 |
 |---|---|---|
-| 点点客户端 | `C:\Users\李平\AppData\Local\Programs\Diandian` | 商业客户端，改不了字节 |
-| 服务器端 | `D:\gao\wbai\rea\server` | 替 botlearn 云端，点点靠 hosts 指过来 |
-| xiaoliu 客户端 | `D:\gao\xiaoliu\mattpocock` | 自研客户端，点点与它并列 |
+| 点点客户端 | `diandian-client/` | 商业客户端，改不了字节 |
+| 服务器端 | `rea/server/` | 替 botlearn 云端，点点靠 hosts 指过来 |
+| xiaoliu 客户端 | `xiaoliu-repo/` | 自研客户端，点点与它并列 |
 
 ADR 0011 把 xiaoliu 改成**硬切**云直连：删掉 `BaseUrl`/`AccessToken`/`AllowUntrustedTls`，
 删掉 `/diandian` 路径换算，语音改走火山原生 WS 协议。这解开了「xiaoliu 依赖服务器进程」，
@@ -158,9 +161,9 @@ DPAPI(CurrentUser)（`SecretProtector`）。`AccessToken` 是本地服务器的�
 
 | 副本 | 角色 | 处置 |
 |---|---|---|
-| `D:\gao\xiaoliu\mattpocock` | 真实工作副本 | **保留为唯一主线**，本 ADR 在此落地 |
-| `D:\gao\xiaoliu\potepo` | 支线（数据目录隔离 + 崩溃日志 + 开发脚本） | 有价值的三项已并入主线，副本可弃 |
-| `D:\gao\xiaoliu\xiaoliu-dsh` | PR 审查用的 HTTPS 克隆 | 一次性审查工具，可弃 |
+| `xiaoliu-repo/` | 真实工作副本 | **保留为唯一主线**，本 ADR 在此落地 |
+| `xiaoliu-repo/potepo/` | 支线（数据目录隔离 + 崩溃日志 + 开发脚本） | 有价值的三项已并入主线，副本可弃 |
+| `xiaoliu-repo/xiaoliu-dsh/` | PR 审查用的 HTTPS 克隆 | 一次性审查工具，可弃 |
 
 `potepo` 三项独有内容的处置：
 
@@ -170,5 +173,5 @@ DPAPI(CurrentUser)（`SecretProtector`）。`AccessToken` 是本地服务器的�
   `%LOCALAPPDATA%\xiaoliu`，双线共目录的问题已不存在，不需要。
 - **`scripts/run-server.sh`**：**不入主线**（见 ADR 0013）。它为了开明文端口，
   只能 `eval` 服务器端的 export 段，于是反过来对本仓库产生硬编码绝对路径依赖
-  （`D:/gao/wbai/rea/...`）。改法是让服务器端启动器自己支持明文模式，
+  （`rea/` 下的绝对路径）。改法是让服务器端启动器自己支持明文模式，
   本仓库不必再养第二个启动器。
