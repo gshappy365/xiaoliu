@@ -109,12 +109,12 @@ reference/*
   仍留在原处 —— 它们是服务器端项目的产物，`rea/reports/` 里大量引用其路径，
   搬迁要连带改报告。本 ADR 只处理「客户端仓库里的完整版」
 
-**尚未处理的目录耦合**（盘点后留给后续）：
+**已全部处理的目录耦合**（盘点后逐项落地）：
 
 | # | 耦合 | 位置 |
 |---|---|---|
 | C4 | 文档用绝对路径交叉引用 | `CONTEXT.md`、`docs/adr/0008` 等多处指向 `rea/` 的绝对路径 —— 已由 ADR 0014 处理 |
-| C5 | 计划任务名误导 | `xiaoliu-server` / `xiaoliu-server-watchdog` 跑的其实是点点的服务器，却挂着「小六」前缀 |
+| C5 | 计划任务名误导 | `xiaoliu-server` / `xiaoliu-server-watchdog` 跑的其实是点点的服务器，却挂着「小六」前缀 —— 已由 ADR 0015 处理 |
 
 ---
 
@@ -167,6 +167,10 @@ xiaoliu-client           Command:  ...\xiaoliu\start-xiaoliu.bat
 > ⚠️ `Set-ScheduledTask -TaskName` **支持通配符**：`xiaoliu-server` 会同时匹配
 > `xiaoliu-server-watchdog`。改完必须逐个任务重新读取核对，不能只看一条。
 
+> 📌 后续：这次只改了 action，任务**名**留到 C5 处理。
+> 见 ADR 0015 —— `xiaoliu-server` / `xiaoliu-server-watchdog`
+> 已改名为 `diandian-server` / `diandian-server-watchdog`。
+
 ### .bat 的注释必须是 ASCII
 
 本机系统代码页是 **936（GBK）**，cmd.exe 按 OEM 代码页读 `.bat`。
@@ -182,6 +186,7 @@ UTF-8 写的中文注释会被误解码，进而产生
   本次重启后 5 秒 healthz 恢复 200，端到端对话正常（首字 1490ms）。
 - 计划任务**名**没改（`xiaoliu-server` 跑的仍是点点的服务端）—— 属 C5，
   改名要重建任务、有中断风险，不在本次范围
+  → **已由 ADR 0015 处理**：改名为 `diandian-server` / `diandian-server-watchdog`
 - `wbai/xiaoliu/` 的**空目录壳删不掉**（被某进程持有句柄，
   `Directory.Delete` 报「正由另一进程使用」）。内容已全部移出，不影响功能。
   沙箱的 `genie-trash` 对**空目录**会报错但实际已删除（Windows 回收站 API 的已知限制）
