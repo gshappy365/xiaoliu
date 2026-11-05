@@ -189,7 +189,9 @@ UTF-8 写的中文注释会被误解码，进而产生
   → **已由 ADR 0015 处理**：改名为 `diandian-server` / `diandian-server-watchdog`
 - `wbai/xiaoliu/` 的**空目录壳删不掉**（被某进程持有句柄，
   `Directory.Delete` 报「正由另一进程使用」）。内容已全部移出，不影响功能。
-  沙箱的 `genie-trash` 对**空目录**会报错但实际已删除（Windows 回收站 API 的已知限制）
+  → **2026-11-05 已解决**：根因查明是**残留的 WorkBuddy 会话进程把该目录设成了
+  当前工作目录**（进程 CWD 持有目录句柄），不是文件被占用。结束该进程组后
+  `RemoveDirectoryW` 返回 0，目录已删除。详见 ADR 0016。
 
 ## 验证
 

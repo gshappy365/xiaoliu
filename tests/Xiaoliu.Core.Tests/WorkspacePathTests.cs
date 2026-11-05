@@ -34,6 +34,8 @@ public sealed class WorkspacePathTests
         "docs/workspace-layout.md",
         // 本决策记录本身就是「关于绝对路径」的文档，引用违规样例是它的内容。
         "docs/adr/0014-document-path-portability.md",
+        // 同理：这份记录「目录被锁」的现象，路径是它的内容。
+        "docs/adr/0016-windows-directory-locked-by-process-cwd.md",
     };
 
     /// <summary>
