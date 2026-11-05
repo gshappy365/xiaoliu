@@ -7,11 +7,13 @@ namespace Xiaoliu.Core.Tools;
 public sealed record ToolDefinition(string Name, string Description, string InputSchemaJson);
 
 /// <summary>
-/// 14 个工具的声明。描述与 schema 尽量照抄点点（reference/tools-from-diandian.json），
+/// 14 个工具的声明。描述与 schema 尽量照抄点点
+/// （点点反编译源码目录下的 tools-from-diandian.json，该目录已移出本仓库，
+/// 位置见 reference/README.md），
 /// 因为模型对这套措辞已经调过参；改动措辞会改变工具命中率，不是「优化文案」。
 ///
 /// 排除的 5 个（课程三件套 + 技能两件套）不声明、收到即 rejected，
-/// 见 docs/adr 与 rea/docs/adr/0005。
+/// 见 docs/adr 与 rea/docs/adr/0005（路径记法见 docs/workspace-layout.md）。
 /// </summary>
 public static class ToolCatalog
 {

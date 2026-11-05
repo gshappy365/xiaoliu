@@ -96,8 +96,8 @@ public sealed class RetentionTests : IDisposable
     public void FactsAreDeduplicatedByContent()
     {
         using var store = new HistoryStore(_dbPath);
-        store.AddFact("identity", "用户叫李平。");
-        store.AddFact("identity", "用户叫李平");
+        store.AddFact("identity", "用户叫张三。");
+        store.AddFact("identity", "用户叫张三");
 
         Assert.Single(store.Facts());
     }

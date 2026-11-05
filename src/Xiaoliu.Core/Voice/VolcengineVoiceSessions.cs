@@ -17,7 +17,7 @@ namespace Xiaoliu.Core.Voice;
 /// 二进制帧编解码在 <see cref="VolcengineFrame"/> / <see cref="VolcEventFrameCodec"/> /
 /// <see cref="VolcResponseParser"/>，纯逻辑可单测。
 /// </summary>
-public sealed class AsrSession : IAsyncDisposable
+public sealed class VolcengineAsrSession : IAsrSession
 {
     private readonly ClientWebSocket _socket;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
@@ -37,7 +37,7 @@ public sealed class AsrSession : IAsyncDisposable
 
     public event Action<string>? PartialReceived;
 
-    private AsrSession(ClientWebSocket socket, int sampleRate)
+    private VolcengineAsrSession(ClientWebSocket socket, int sampleRate)
     {
         _socket = socket;
         SampleRate = sampleRate;
@@ -46,7 +46,7 @@ public sealed class AsrSession : IAsyncDisposable
     }
 
     /// <summary>连上大模型流式识别。凭证是语音技术的 appid + access token。</summary>
-    public static async Task<AsrSession> ConnectAsync(
+    public static async Task<VolcengineAsrSession> ConnectAsync(
         string appId, string accessToken, int sampleRate, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(accessToken))
@@ -61,7 +61,7 @@ public sealed class AsrSession : IAsyncDisposable
         socket.Options.SetRequestHeader("X-Api-Request-Id", Guid.NewGuid().ToString());
         await socket.ConnectAsync(new Uri(WireProtocol.AsrWebSocketUrl), cancellationToken);
 
-        var session = new AsrSession(socket, sampleRate);
+        var session = new VolcengineAsrSession(socket, sampleRate);
         var first = new JsonObject
         {
             ["user"] = new JsonObject { ["uid"] = "xiaoliu" },
@@ -211,7 +211,7 @@ public sealed class AsrSession : IAsyncDisposable
 }
 
 /// <summary>TTS 会话。文本按句送，音频按帧回，播放由 App 侧排队。</summary>
-public sealed class TtsSession : IAsyncDisposable
+public sealed class VolcengineTtsSession : ITtsSession
 {
     private readonly ClientWebSocket _socket;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
@@ -236,9 +236,12 @@ public sealed class TtsSession : IAsyncDisposable
 
     public const int SampleRate = 24000;
 
+    /// <summary>接缝要求的实例属性（<see cref="ITtsSession.SampleRate"/>）。</summary>
+    int ITtsSession.SampleRate => SampleRate;
+
     public event Action<byte[]>? AudioReceived;
 
-    private TtsSession(ClientWebSocket socket, JsonObject reqParams)
+    private VolcengineTtsSession(ClientWebSocket socket, JsonObject reqParams)
     {
         _socket = socket;
         _reqParams = reqParams;
@@ -246,7 +249,7 @@ public sealed class TtsSession : IAsyncDisposable
     }
 
     /// <summary>连上大模型语音合成（双向流式）。voiceId 是火山官方音色 ID。</summary>
-    public static async Task<TtsSession> ConnectAsync(
+    public static async Task<VolcengineTtsSession> ConnectAsync(
         string appId, string accessToken, string voiceId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(accessToken))
@@ -271,7 +274,7 @@ public sealed class TtsSession : IAsyncDisposable
             },
             ["speaker"] = voiceId,
         };
-        var session = new TtsSession(socket, reqParams);
+        var session = new VolcengineTtsSession(socket, reqParams);
 
         // 握手两步：StartConnection → ConnectionStarted，StartSession → SessionStarted。
         await session.ExchangeAsync(

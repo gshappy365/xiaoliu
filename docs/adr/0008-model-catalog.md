@@ -15,7 +15,7 @@
 
 后半句是硬要求。原来服务端 `rewrite_request` 无条件把 `model` 覆盖成 `UPSTREAM_MODEL`，
 所以「界面选了 A、实际用 B」是必然结果 —— 下拉做出来也是假的。服务端为此改了路由
-（`D:\gao\wbai\rea\docs\adr\0006-client-selected-model-routing.md`），
+（`rea/docs/adr/0006-client-selected-model-routing.md`，路径记法见 `docs/workspace-layout.md`），
 按客户端发来的 model 前缀决定走方舟还是默认上游。
 
 ## Decision

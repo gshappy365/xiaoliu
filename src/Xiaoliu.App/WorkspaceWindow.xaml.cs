@@ -518,10 +518,26 @@ public partial class WorkspaceWindow : Window
 
         CustomBaseUrlBox.Text = _settings.CustomBaseUrl;
         CustomModelBox.Text = _settings.CustomModelName;
+
+        // 连接方式（ADR 0012）。下拉项在 FillConnectionModePicker 里建。
+        FillConnectionModePicker();
+        SelectByTag(ConnectionModePicker, _settings.ConnectionMode);
+        // SelectByTag 找不到匹配项时下拉会停在第一项，与设置里的模式不一致。
+        // 这里以设置为准回填，并同步下拉，避免用户以为切了模式其实没切。
+        _settings.ConnectionMode = SelectedTag(ConnectionModePicker) as string
+                                   ?? _settings.ConnectionMode;
+        ServerBaseUrlBox.Text = _settings.BaseUrl;
+        ServerTokenBox.Text = _settings.AccessToken;
+        AllowUntrustedTlsSwitch.IsChecked = _settings.AllowUntrustedTls;
+        ApplyConnectionModeVisibility();
+
         // 密码框留空 = 保持已配置的值；只有用户真输入了才覆盖（见 OnSaveConnectionClick）。
-        ConnectionResultText.Text = string.IsNullOrEmpty(_settings.ArkApiKey)
-            ? "方舟 key 未配置，填好点「保存」"
-            : "方舟 key 已配置（重填即覆盖）";
+        // 本地服务器模式不需要任何云密钥，这句提示要跟着模式走（ADR 0012）。
+        ConnectionResultText.Text = _settings.IsLocalServerMode
+            ? "本地服务器模式：不需要云密钥，填好地址点「保存」"
+            : string.IsNullOrEmpty(_settings.ArkApiKey)
+                ? "方舟 key 未配置，填好点「保存」"
+                : "方舟 key 已配置（重填即覆盖）";
 
         RefreshHome();
     }
@@ -932,6 +948,64 @@ public partial class WorkspaceWindow : Window
 
     // ------------------------------------------------------------------ 连接
 
+    /// <summary>建「连接方式」下拉的两项（ADR 0012）。</summary>
+    private void FillConnectionModePicker()
+    {
+        if (ConnectionModePicker.Items.Count > 0)
+        {
+            return;
+        }
+
+        ConnectionModePicker.Items.Add(new ComboBoxItem
+        {
+            Content = "云直连（自带密钥，不依赖服务器）",
+            Tag = AppSettings.ConnectionModeCloud,
+        });
+        ConnectionModePicker.Items.Add(new ComboBoxItem
+        {
+            Content = "本地服务器（三条链路都经服务器端）",
+            Tag = AppSettings.ConnectionModeLocalServer,
+        });
+    }
+
+    /// <summary>按当前模式显示对应的分区：云直连看密钥，本地服务器看地址与口令。</summary>
+    private void ApplyConnectionModeVisibility()
+    {
+        var local = _settings.IsLocalServerMode;
+        CloudKeyPanel.Visibility = local ? Visibility.Collapsed : Visibility.Visible;
+        LocalServerPanel.Visibility = local ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnConnectionModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        var tag = SelectedTag(ConnectionModePicker);
+        if (tag is not string mode)
+        {
+            return;
+        }
+
+        _settings.ConnectionMode = mode;
+        ApplyConnectionModeVisibility();
+        Save();
+        EndpointText.Text = DescribeEndpoint();
+    }
+
+    private void OnAllowUntrustedTlsChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _settings.AllowUntrustedTls = AllowUntrustedTlsSwitch.IsChecked == true;
+        Save();
+    }
+
     private async void OnSaveConnectionClick(object sender, RoutedEventArgs e)
     {
         // 密码框留空 = 保持原值；填了就重新加密覆盖（SecretProtector 幂等，不会套两层）。
@@ -957,7 +1031,23 @@ public partial class WorkspaceWindow : Window
 
         _settings.CustomBaseUrl = CustomBaseUrlBox.Text.Trim();
         _settings.CustomModelName = CustomModelBox.Text.Trim();
+
+        // 本地服务器（ADR 0012）
+        _settings.BaseUrl = ServerBaseUrlBox.Text.Trim();
+        _settings.AccessToken = ServerTokenBox.Text.Trim();
+
+        // 连接方式可能在下拉里改了，一并取回来。
+        if (SelectedTag(ConnectionModePicker) is string mode)
+        {
+            _settings.ConnectionMode = mode;
+        }
+
         Save();
+
+        // 换端点/换密钥后必须重建 transport（ADR 0012）。
+        // 不重建的话旧凭据会一直烤在构造时创建的那一份里 ——
+        // 「保存并测试」测的是新建请求永远通，真实对话用的是旧凭据永远 401。
+        _companion.RebuildTransport();
 
         EndpointText.Text = DescribeEndpoint();
         ConnectionResultText.Text = "正在测试…";
@@ -970,6 +1060,12 @@ public partial class WorkspaceWindow : Window
     {
         try
         {
+            // 本地服务器模式（ADR 0012）：测的是服务器端的 /chat。
+            if (_settings.IsLocalServerMode)
+            {
+                return await TestLocalServerAsync();
+            }
+
             var isCustom = _settings.IsCustomModel;
             var url = isCustom
                 ? OpenAiChatClient.BuildEndpoint(_settings.CustomBaseUrl)
@@ -1005,9 +1101,53 @@ public partial class WorkspaceWindow : Window
         }
     }
 
+    /// <summary>
+    /// 本地服务器模式的连通测试（ADR 0012）。
+    ///
+    /// 用真实的 transport 实现发请求，而不是自己拼 URL ——
+    /// 自拼会漏掉「路径换算」「自签证书放行」这类细节，测通了真跑还是不通。
+    /// </summary>
+    private async Task<string> TestLocalServerAsync()
+    {
+        try
+        {
+            var request = new ChatRequest
+            {
+                Model = _settings.UpstreamModel,
+                System = "ping",
+                Messages = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = "ping" }),
+                MaxTokens = 1,
+            };
+
+            var transport = ChatTransportFactory.Create(_settings);
+            try
+            {
+                var round = await transport.StreamAsync(request, null, CancellationToken.None);
+                return $"通（本地服务器，stop_reason={round.StopReason}）";
+            }
+            finally
+            {
+                // IChatTransport 不继承 IDisposable，但两个实现都持有 HttpClient。
+                if (transport is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return "连不上本地服务器：" + ex.Message;
+        }
+    }
+
     /// <summary>侧栏那行「现在用谁」：模型 + 上游来源。</summary>
     private string DescribeEndpoint()
     {
+        if (_settings.IsLocalServerMode)
+        {
+            return $"{_settings.Model} · 本地服务器";
+        }
+
         return _settings.IsCustomModel
             ? $"自定义端点 · {_settings.CustomModelName}"
             : $"{_settings.Model} · 火山方舟";

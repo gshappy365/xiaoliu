@@ -21,15 +21,36 @@ public interface IChatTransport
 }
 
 /// <summary>
-/// 按设置挑传输实现：模型是 <see cref="AppSettings.CustomModelKey"/> 时走自定义
-/// OpenAI 兼容端点，否则走火山方舟的 Anthropic 兼容端点。
+/// 按设置挑传输实现（ADR 0012）。
+///
+/// 两条主路：
+/// - <b>本地服务器</b>（<see cref="AppSettings.ConnectionModeLocalServer"/>）：
+///   三条链路都经本机服务器端，接口与点点共用。
+/// - <b>云直连</b>（<see cref="AppSettings.ConnectionModeCloud"/>）：对话与看图走火山方舟，
+///   语音走火山语音技术。模型是 <see cref="AppSettings.CustomModelKey"/> 时再分到
+///   自定义的 OpenAI 兼容端点。
 /// </summary>
 public static class ChatTransportFactory
 {
     public static IChatTransport Create(AppSettings settings)
     {
+        if (settings.IsLocalServerMode)
+        {
+            return new LocalServerChatClient(settings);
+        }
+
         if (settings.IsCustomModel)
         {
+            // 空 base URL 不能在这里抛：工厂是在 Companion 构造期被调的，
+            // 而 App.OnStartup 的异常 WPF 的 DispatcherUnhandledException 兜不住 ——
+            // 表现是「重启即崩，且崩在能进设置页之前」，用户没法自救。
+            // 配置层（AppSettings.Normalize）已经把这个组合自愈掉了；
+            // 这里再兜一层，防止有人绕过 Normalize 直接构造。
+            if (string.IsNullOrWhiteSpace(settings.CustomBaseUrl))
+            {
+                return new ArkChatClient(settings.ArkApiKeyPlain ?? string.Empty);
+            }
+
             return new OpenAiChatClient(
                 settings.CustomBaseUrl,
                 settings.CustomApiKeyPlain ?? string.Empty,
@@ -172,6 +193,16 @@ public sealed class ChatRequest
     public IReadOnlyList<ToolDefinition>? Tools { get; init; }
     public int MaxTokens { get; init; } = 8192;
     public string? ReasoningEffort { get; init; }
+
+    /// <summary>
+    /// 当前模型自己能不能看图。
+    ///
+    /// 云直连（<see cref="ArkChatClient"/>）不用这个字段 —— 纯文本模型拿图会在
+    /// 客户端侧就被拒掉（<c>ConversationAgent</c> 提前拦），轮不到上游。
+    /// 本地服务器（<see cref="LocalServerChatClient"/>）要用：服务器端据此决定
+    /// 图片原样透传还是跑 VL/OCR 转文本。
+    /// </summary>
+    public bool VisionCapable { get; init; }
 }
 
 public sealed class ChatHttpException(HttpStatusCode status, string body)

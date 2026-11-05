@@ -12,7 +12,7 @@
 
 ## 前提
 
-- 服务端在 443 上跑着：`cd /d/gao/wbai/rea && bash server/start-real.sh`
+- 服务端在 443 上跑着：到 `rea/` 下执行 `bash server/start-real.sh`（路径对照见 `docs/workspace-layout.md`）
 - **不要同时开点点**：两者抢同一套热键，必有一个失灵
 - 日志：`%LOCALAPPDATA%\xiaoliu\logs\xiaoliu-YYYYMMDD.log`，出问题先看这里
 

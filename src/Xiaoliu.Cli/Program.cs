@@ -80,7 +80,40 @@ internal static class Program
 
     private static async Task<int> HealthAsync(AppSettings settings)
     {
+        Console.WriteLine($"连接方式：{settings.ConnectionMode}"
+                          + (settings.IsLocalServerMode ? "（本地服务器）" : "（云直连）"));
         Console.WriteLine($"对话模型：{settings.Model}" + (settings.IsCustomModel ? $"（自定义端点 {settings.CustomBaseUrl}，模型 {settings.CustomModelName}）" : "（火山方舟）"));
+
+        // 本地服务器模式（ADR 0012）：走真实 transport 发一次请求，
+        // 自拼 URL 会漏掉路径换算和自签证书放行，测通了真跑还是不通。
+        if (settings.IsLocalServerMode)
+        {
+            Console.WriteLine($"端点：{settings.BaseUrl}");
+            Console.WriteLine($"语音：{WireProtocol.WebSocketUri(settings.ServerBaseUri, WireProtocol.AsrPath)}");
+            var request = new ChatRequest
+            {
+                Model = settings.UpstreamModel,
+                System = "ping",
+                Messages = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = "ping" }),
+                MaxTokens = 1,
+            };
+
+            var transport = ChatTransportFactory.Create(settings);
+            try
+            {
+                var round = await transport.StreamAsync(request, null, CancellationToken.None);
+                Console.WriteLine($"连通测试 {settings.BaseUrl}/chat → OK（stop_reason={round.StopReason}）");
+                return 0;
+            }
+            finally
+            {
+                if (transport is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+        }
+
         Console.WriteLine($"端点：{WireProtocol.ArkAnthropicEndpoint}");
         Console.WriteLine($"语音：{WireProtocol.AsrWebSocketUrl}");
         Console.WriteLine($"方舟 key：{(string.IsNullOrEmpty(settings.ArkApiKey) ? "未配置" : "已配置")}");
@@ -220,12 +253,10 @@ internal static class Program
         }
 
         var (pcm, sampleRate) = ReadWav(args[0]);
-        Console.WriteLine($"asr  {WireProtocol.AsrWebSocketUrl}  {pcm.Length / 2 / sampleRate:F2}s @ {sampleRate}Hz");
+        Console.WriteLine($"asr  模式 {settings.ConnectionMode}  {pcm.Length / 2 / sampleRate:F2}s @ {sampleRate}Hz");
 
-        await using var session = await AsrSession.ConnectAsync(
-            settings.VoiceAppIdPlain ?? string.Empty,
-            settings.VoiceAccessTokenPlain ?? string.Empty,
-            sampleRate, CancellationToken.None);
+        await using var session = await VoiceSessionFactory.ConnectAsrAsync(
+            settings, sampleRate, CancellationToken.None);
         session.PartialReceived += text => Console.WriteLine($"[partial] {text}");
 
         // 按 100ms 一帧推，模拟麦克风节奏。
@@ -255,10 +286,7 @@ internal static class Program
         var pcm = new MemoryStream();
         long firstFrame = -1;
 
-        await using var session = await TtsSession.ConnectAsync(
-            settings.VoiceAppIdPlain ?? string.Empty,
-            settings.VoiceAccessTokenPlain ?? string.Empty,
-            settings.TtsVoiceId, CancellationToken.None);
+        await using var session = await VoiceSessionFactory.ConnectTtsAsync(settings, CancellationToken.None);
         session.AudioReceived += bytes =>
         {
             if (firstFrame < 0)
@@ -272,13 +300,14 @@ internal static class Program
         await session.SendTextAsync(text, CancellationToken.None);
         await session.FinishAsync(CancellationToken.None);
 
-        var seconds = pcm.Length / 2.0 / TtsSession.SampleRate;
+        var sampleRate = session.SampleRate;
+        var seconds = pcm.Length / 2.0 / sampleRate;
         Console.WriteLine($"tts  首帧 {firstFrame}ms / 总 {stopwatch.ElapsedMilliseconds}ms / "
                           + $"{pcm.Length} 字节 ≈ {seconds:F2}s 音频");
 
         if (outPath is not null)
         {
-            await File.WriteAllBytesAsync(outPath, BuildWav(pcm.ToArray(), TtsSession.SampleRate));
+            await File.WriteAllBytesAsync(outPath, BuildWav(pcm.ToArray(), sampleRate));
             Console.WriteLine($"已写出 {outPath}");
         }
 
