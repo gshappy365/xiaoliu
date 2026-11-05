@@ -110,9 +110,78 @@ reference/*
 
 | # | 耦合 | 位置 |
 |---|---|---|
-| C3 | 部署目录把服务器与客户端混装 | `D:\gao\wbai\xiaoliu\`：watchdog / launch_hidden / start-server 都是服务器端的，却和 `start-xiaoliu.bat` 同住 |
 | C4 | 文档用绝对路径交叉引用 | `CONTEXT.md`、`docs/adr/0008` 等多处指向 `D:\gao\wbai\rea\...` |
 | C5 | 计划任务名误导 | `xiaoliu-server` / `xiaoliu-server-watchdog` 跑的其实是点点的服务器，却挂着「小六」前缀 |
+
+---
+
+## C3：拆分部署目录（2026-11-05 第二阶段）
+
+C1 把闭源源码搬出仓库，C2 把服务器启动器搬回服务器项目，**C3 处理最后一个**：
+`D:\gao\wbai\xiaoliu\` 这一个目录同时装着点点的服务端运维脚本和小六客户端的启动器。
+
+### 拆分结果
+
+| 新位置 | 装什么 | 归谁 |
+|---|---|---|
+| `D:\gao\wbai\diandian-server-ops\` | `launch_hidden.py`、`watchdog.ps1`、`watchdog_host.py`、`start-server.bat`、`check-proxy.sh` + 3 个日志 | 点点服务端（rea） |
+| `D:\gao\xiaoliu\deploy\` | `start-xiaoliu.bat`、`run-test.bat`、`xiaoliu-started.png` | 小六客户端 |
+
+原目录 `D:\gao\wbai\xiaoliu\` 的内容全部移出（进回收站 + `_backup-xiaoliu-deploy-20261105\` 全量备份）。
+
+### 路径不再硬编码
+
+服务器侧的脚本全部改成**从自身位置推导**：
+
+- `launch_hidden.py`：`HERE = os.path.dirname(os.path.abspath(__file__))`，
+  日志落在 `HERE`，服务器代码取 `os.path.join(os.path.dirname(HERE), "rea", "server")`
+- `watchdog_host.py`：同法推导 `watchdog.ps1` 与错误日志的位置
+- `watchdog.ps1`：`$here = Split-Path -Parent $MyInvocation.MyCommand.Path`，
+  `$log = Join-Path $here 'watchdog.log'`
+- `start-server.bat`：`cd /d "%~dp0..\rea\server"`、`>> "%~dp0server-console.log"`
+
+于是**整个目录可以整体搬走而不失效**。
+
+客户端侧的 `start-xiaoliu.bat` 原本写死 `mattpocock` 这一个副本名，
+改成从 `%~dp0` 向上探测 `mattpocock` → `xiaoliu-dsh` → `potepo`，
+取第一个存在发布产物的副本；也可用 `XIAOLIU_REPO` 环境变量指定。
+
+### 计划任务只改 action，不重建
+
+用 `Set-ScheduledTask -Action`（而非 `Unregister` + `Register`），
+触发器、主体、电池策略、`ExecutionTimeLimit` 等全部原样保留。
+改前导出了 XML，改后**逐行 diff 只有路径那一行不同**：
+
+```
+xiaoliu-server           Arguments: ...\xiaoliu\launch_hidden.py
+                      →  ...\diandian-server-ops\launch_hidden.py
+xiaoliu-server-watchdog  Arguments: ...\xiaoliu\watchdog_host.py
+                      →  ...\diandian-server-ops\watchdog_host.py
+xiaoliu-client           Command:  ...\xiaoliu\start-xiaoliu.bat
+                      →  ...\xiaoliu\deploy\start-xiaoliu.bat
+```
+
+> ⚠️ `Set-ScheduledTask -TaskName` **支持通配符**：`xiaoliu-server` 会同时匹配
+> `xiaoliu-server-watchdog`。改完必须逐个任务重新读取核对，不能只看一条。
+
+### .bat 的注释必须是 ASCII
+
+本机系统代码页是 **936（GBK）**，cmd.exe 按 OEM 代码页读 `.bat`。
+UTF-8 写的中文注释会被误解码，进而产生
+`'xxx' 不是内部或外部命令` 的假报错（注释行被当成命令执行了）。
+
+→ 三个 `.bat` 的注释一律改 ASCII 英文，中文说明放同目录 `README.md`。
+这条与「`.bat` 必须是 CRLF + 无 BOM」是同一类问题，一起踩过。
+
+### 代价与注意事项
+
+- **服务端要重启一次**才能让新的 `launch_hidden.py` 生效（进程已加载旧脚本）。
+  本次重启后 5 秒 healthz 恢复 200，端到端对话正常（首字 1490ms）。
+- 计划任务**名**没改（`xiaoliu-server` 跑的仍是点点的服务端）—— 属 C5，
+  改名要重建任务、有中断风险，不在本次范围
+- `D:\gao\wbai\xiaoliu\` 的**空目录壳删不掉**（被某进程持有句柄，
+  `Directory.Delete` 报「正由另一进程使用」）。内容已全部移出，不影响功能。
+  沙箱的 `genie-trash` 对**空目录**会报错但实际已删除（Windows 回收站 API 的已知限制）
 
 ## 验证
 
@@ -128,3 +197,9 @@ reference/*
   测试后 443 healthz 仍 200
 - 仓库：Release 构建 0 警告 0 错误；113 个单测全绿；
   远程仓库扫描 `Diandian` 命名的文件数为 **0**
+- C3 拆分：脚本语法检查全过（py_compile + PSParser.Tokenize）、
+  路径推导自检 `SERVER_DIR` 存在、`check-proxy.sh` 实跑 `VERDICT=GREEN`、
+  `watchdog_host.py` 实跑退出码 0、
+  服务重启后进程树为 `launch_hidden.py → run_live.py → uvicorn`、
+  日志确实写入新目录、旧目录日志停止增长、
+  端到端对话正常、三个 `.bat` 实跑无乱码报错

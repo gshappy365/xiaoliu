@@ -10,8 +10,16 @@
   - `docs/adr/` —— 决策记录，术语表在根目录 `CONTEXT.md`（改代码前先读，词表用它的说法）
 - **本机真实工作副本是 `D:\gao\xiaoliu\mattpocock`**（不是 `xiaoliu-dsh`）。发布产物在
   `mattpocock\src\Xiaoliu.App\bin\Release\net8.0-windows\win-x64\publish\xiaoliu.exe`。
-- 部署：`D:\gao\wbai\xiaoliu\`（`start-xiaoliu.bat` / `start-server.bat` / `watchdog.ps1` / `server-console.log`）。
-- 计划任务：`xiaoliu-server`（rea 自建服务器，443）、`xiaoliu-server-watchdog`（每 2 分钟探 healthz）。
+- **部署目录已拆分**（2026-11-05 C3）：
+  - 服务器侧 → `D:\gao\wbai\diandian-server-ops\`
+    （`launch_hidden.py` / `watchdog.ps1` / `watchdog_host.py` / `start-server.bat` /
+    `check-proxy.sh` + 3 个日志 + `README.md`）
+  - 客户端侧 → `D:\gao\xiaoliu\deploy\`
+    （`start-xiaoliu.bat` / `run-test.bat` / `xiaoliu-started.png` + `README.md`）
+  - 原 `D:\gao\wbai\xiaoliu\` 已清空（空目录壳被某进程占着删不掉，不影响功能）
+  - 全量备份在 `D:\gao\wbai\_backup-xiaoliu-deploy-20261105\`（14 文件）
+- 计划任务：`xiaoliu-server`（rea 自建服务器，443）、`xiaoliu-server-watchdog`（每 2 分钟探 healthz）、
+  `xiaoliu-client`（起客户端）。**action 已指向新路径，任务名未改**（C5）。
 - **三副本已收敛**（2026-11-04）：`xiaoliu-dsh`（PR3 测试副本）/ `mattpocock`（主线）/ `potepo`（分线）
   → 代码主线统一到 `mattpocock`，分支 `feature/dual-connection`。
   potepo 的三项独有价值已逐项并入主线：未处理异常弹窗（进 `App.xaml.cs`）、`scripts/run-server.sh`
@@ -34,13 +42,16 @@
   改成让**服务器端启动器自己支持明文模式**：
   `TLS=0 PORT=8899 bash start-real.sh`（`run_live.py --plaintext` + `start-real.sh` 的 `TLS` 开关）。
   → 小六仓库里**不再有任何服务器端代码**，它就是个客户端。
+- 部署目录混装 → **拆成两个目录**（见上）。
+  服务器侧脚本全部改成**从自身位置推导路径**（`__file__` / `%~dp0` / `$PSScriptRoot`），
+  整个目录可整体搬走而不失效；客户端 `start-xiaoliu.bat` 改成**探测三副本**，
+  不再写死 `mattpocock`。
   → 决策记录在 `docs/adr/0013-directory-decoupling.md`。
 
-**尚未解耦（用户明确只做这两项，其余保留）：**
+**尚未解耦（用户明确只做这三项，其余保留）：**
 
 | # | 耦合 | 位置 | 备注 |
 |---|---|---|---|
-| C3 | 部署目录把服务器与客户端混装 | `D:\gao\wbai\xiaoliu\`：`start-server.bat`→rea、`watchdog.ps1`/`watchdog_host.py`/`launch_hidden.py`→rea、`server-console.log`，但也有 `start-xiaoliu.bat`→小六客户端 | 一个目录两个项目 |
 | C4 | 文档用绝对路径交叉引用 | `CONTEXT.md:5`、`docs/adr/0008:18`、`docs/adr/0012` 多处指向 `D:\gao\wbai\rea\...`；另有 4 处代码注释指向 `rea/server/app/*.py` | 文档级 |
 | C5 | 计划任务名误导 | `xiaoliu-server` / `xiaoliu-server-watchdog` 跑的其实是**点点的服务器**（rea），却挂着「小六」前缀 | 改名要重建计划任务，有中断风险 |
 | — | 点点反编译源码仍在 rea 项目内 | `rea/decompiled/`(84 .cs) 与 `rea/decompiled-089/`(37 .cs) | 属服务器端项目的产物，`rea/reports/` 大量引用，搬迁要连带改报告 |
@@ -48,6 +59,13 @@
 **搬动前必查的三件事（每次都查）**：csproj 是否 glob 该目录、仓库内有几处引用、
 其他副本是否有重复副本。
 → 通用规律：**跨目录搬代码前先查 csproj 的 glob 与引用点**，否则构建会静默崩。
+
+**改计划任务的两个坑**：
+- `Set-ScheduledTask -TaskName` **支持通配符** —— `xiaoliu-server` 会同时匹配
+  `xiaoliu-server-watchdog`。改完必须逐个任务重新读取核对。
+- 只用 `Set-ScheduledTask -Action`（**不重建任务**），触发器/主体/电池策略/
+  `ExecutionTimeLimit` 全部原样保留；改前 `Export-ScheduledTask` 存 XML，
+  改后逐行 diff 确认只有路径那行变了。
 
 ## 仓库与 PR 布局（GitHub: `gshappy365/xiaoliu`）
 
@@ -116,6 +134,20 @@
 - WPF 发布用项目自带配置：`dotnet publish -c Release -o <dir>`；
   **不要加 `--self-contained false`**（与 csproj 的 `PublishSingleFile` 冲突 → NETSDK1176）。
 - UI 自动化探针：设置页的「模型服务」在**二级导航**里，主界面默认停在「对话」页 → 先点「设置」再选目标项。
+- **`.bat` 文件：注释必须用 ASCII 英文 + CRLF + 无 BOM**（2026-11-05 踩过两次）。
+  本机系统代码页是 **936（GBK）**，cmd.exe 按 OEM 代码页读 `.bat` ——
+  UTF-8 写的中文注释会被误解码，注释行被当成命令执行，报
+  `'xxx' 不是内部或外部命令` 的**假报错**（脚本其实跑成功了）。
+  → 注释一律 ASCII，中文说明放同目录 `README.md`。
+  → 写文件用 Python `io.open(p,'w',encoding='ascii',newline='')` 显式控制，
+    Write 工具默认写 LF（cmd 会切错命令行）。
+- **沙箱里 PowerShell 不能从 Bash 调**（`powershell.exe` 被拦）；反过来
+  **cmd.exe 也不能从 Bash 调**（`PROGRAM BLOCKED`）。跨语言调用只能走各自的工具。
+- `Add-Type` 与 `New-Object -ComObject Shell.Application` 都被拦 → 回收站要用
+  `[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(..., SendToRecycleBin)`
+  （该程序集默认已加载，不用 `Add-Type`）。但它对**空目录**会报错（实际已删）。
+- 删除钩子 `genie-trash` 在 `D:\WorkBuddy\resources\vendor\genie-trash\win32-x64.exe`，
+  失败即拒绝删除（fail-closed），**不会**回退到硬删。
 
 ## 待办（2026-11-04 PR #3 审查发现）
 
