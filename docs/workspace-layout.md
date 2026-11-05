@@ -31,7 +31,7 @@
 | `xiaoliu-repo/` | `D:\gao\xiaoliu\mattpocock\` | 本仓库的真实工作副本 |
 | `xiaoliu-repo/potepo/` | `D:\gao\xiaoliu\potepo\` | 旧支线副本（已并入主线，可弃） |
 | `xiaoliu-repo/xiaoliu-dsh/` | `D:\gao\xiaoliu\xiaoliu-dsh\` | 旧 PR 审查用克隆（一次性工具，可弃） |
-| `diandian-client/` | `C:\Users\李平\AppData\Local\Programs\Diandian\` | 点点客户端安装目录（闭源商业产品） |
+| `diandian-client/` | `%LOCALAPPDATA%\Programs\Diandian\` | 点点客户端安装目录（闭源商业产品） |
 
 > 上面这张表是**本机快照**。换机器时只改这一张表，别处不用动。
 

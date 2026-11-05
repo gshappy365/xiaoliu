@@ -237,7 +237,7 @@ public sealed class ToolPolicyTests : IDisposable
     public void FactIsRecordedAtMostOncePerTurn()
     {
         _dispatcher.ResetTurn();
-        var first = _dispatcher.Execute(Call("remember_fact", new { fact = "用户叫李平", category = "identity" }), default);
+        var first = _dispatcher.Execute(Call("remember_fact", new { fact = "用户叫张三", category = "identity" }), default);
         var second = _dispatcher.Execute(Call("remember_fact", new { fact = "用户在北京", category = "identity" }), default);
 
         Assert.False(first["is_error"]!.GetValue<bool>());
