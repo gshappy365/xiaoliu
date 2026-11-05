@@ -7,6 +7,9 @@ artifacts/
 *.user
 *.suo
 
+# WorkBuddy 的项目记忆：本地工作日志，含本机绝对路径与用户名，不该进公开仓库
+.workbuddy/
+
 # 构建
 bin/
 obj/
